@@ -4,7 +4,7 @@ body {
     padding: 0px;
     margin: 0px;
     background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
-        url("/assets/media/space.jpg") center center;
+        url("/assets/media/ironman_bg.jpg") center center;
     background-size: cover;
     width: 100vw;
     height: 100vh;
