@@ -31,26 +31,6 @@
     </head>
 
     <body>
-        <audio id="background-music" autoplay loop>
-            <source src="./assets/media/leoloop.mp3" type="audio/mpeg">
-            Your browser does not support the audio element.
-        </audio>
-        <button id="play-button">Play</button>
-        <script>
-            const audio = document.getElementById('background-music');
-            const audioControls = document.getElementById('audio-controls');
-            const playButton = document.getElementById('play-button');
-
-            playButton.addEventListener('click', () => {
-                if (audio.paused) {
-                    audio.play();
-                    playButton.innerText = 'Pause';
-                } else {
-                    audio.pause();
-                    playButton.innerText = 'Play';
-                }
-            });
-        </script>
         <div id="loading">
             <div id="spinner"></div>
         </div>
