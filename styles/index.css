@@ -11,6 +11,9 @@ body {
     overflow: hidden;
     font-family: "Josefin Sans", sans-serif;
 }
+#audio-controls {
+  display: none;
+}
 #loading {
     width: 100vw;
     height: 100vh;
