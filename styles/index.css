@@ -126,7 +126,7 @@ body {
 
 .quadrant img {
     position: absolute;
-    width: 50%;
+    width: 100%;
     height: 50%;
     transition: transform 0.5s ease;
 }
