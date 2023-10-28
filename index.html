@@ -33,7 +33,34 @@
                     $("#about-content").toggleClass("active");
                 });
             });
-        </script>   
+        </script>  
+        <script>
+            $(document).ready(function () {
+                // Function to show the "About" content and animate images
+                function showAboutContent() {
+                    $("#about-content").addClass("active");
+                    // Animate images to slide in
+                    $(".quadrant img").css("transform", "translateX(0)");
+                }
+
+                // Function to hide the "About" content
+                function hideAboutContent() {
+                    $("#about-content").removeClass("active");
+                    // Reset image positions
+                    $(".quadrant img").css("transform", "translateX(100%)");
+                }
+
+                // Show the "About" content and animate images when the "About" link is clicked
+                $("#about").on("click", function () {
+                    showAboutContent();
+                });
+
+                // Hide the "About" content when the close button is clicked
+                $("#close-button").on("click", function () {
+                    hideAboutContent();
+                });
+            });
+        </script>     
         <script>
             $(document).ready(function () {
                 // Function to show the "About" content and the close button
@@ -95,7 +122,19 @@
             ></div>
         </div>
         <div id="about-content" class="about-content">
-            <!-- Your about content goes here -->
+            <!-- Add four empty quadrants for images to slide in -->
+            <div class="quadrant">
+                <img src="image1.jpg" alt="Image 1">
+            </div>
+            <div class="quadrant">
+                <img src="image2.jpg" alt="Image 2">
+            </div>
+            <div class="quadrant">
+                <img src="image3.jpg" alt="Image 3">
+            </div>
+            <div class="quadrant">
+                <img src="image4.jpg" alt="Image 4">
+            </div>
         </div>
         <div id="close-button" class="close-button">
             <img src="./assets/media/close.png" alt="Home" />
