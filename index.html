@@ -27,6 +27,13 @@
             src="https://kit.fontawesome.com/4c9f56cd03.js"
             crossorigin="anonymous"
         ></script>
+        <script>
+            $(document).ready(function () {
+                $("#about").on("click", function () {
+                    $("#about-content").toggleClass("active");
+                });
+            });
+        </script>        
         <link rel="stylesheet" href="/styles/index.css" />
     </head>
 
@@ -62,6 +69,10 @@
                 style="animation-delay: 1.7s"
             ></div>
         </div>
+        <div id="about-content" class="about-content">
+            <!-- Your about content goes here -->
+        </div>
+
         <div id="player">
             <audio autoplay hidden>
                 <source src="./assets/media/leoloop.mp3" type="audio/mpeg">
