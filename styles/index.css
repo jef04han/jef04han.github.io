@@ -140,7 +140,7 @@ body {
 .quadrant img:nth-child(2) {
     top: 0;
     left: 50%;
-    transform: translate(-100%, 0); /* Second image goes to top right */
+    transform: translate(0, 0); /* Second image goes to top right */
 }
 
 .quadrant img:nth-child(3) {
