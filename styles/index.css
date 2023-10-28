@@ -126,27 +126,27 @@ body {
 
 .quadrant img {
     position: absolute;
-    width: 50%; /* Each image takes up half the width */
-    height: 50%; /* Each image takes up half the height */
+    width: 50%;
+    height: 50%;
     transition: transform 0.5s ease;
 }
 
 .quadrant img:nth-child(1) {
     top: 0;
     left: 0;
-    transform: translate(0, 0); /* First image goes to top left */
+    transform: translate(0, 0);
 }
 
 .quadrant img:nth-child(2) {
     top: 0;
     left: 50%;
-    transform: translate(0, -100%); /* Second image goes to top right */
+    transform: translate(-100%, 0); /* Second image goes to top right */
 }
 
 .quadrant img:nth-child(3) {
     top: 50%;
     left: 0;
-    transform: translate(-100%, 0); /* Third image goes to bottom left */
+    transform: translate(0, -100%); /* Third image goes to bottom left */
 }
 
 .quadrant img:nth-child(4) {
