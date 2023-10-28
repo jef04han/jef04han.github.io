@@ -39,46 +39,6 @@ body {
     z-index: 1001;
     cursor: pointer;
 }
-/* CSS for the Clickable Circle */
-.clickable-circle {
-    width: 400px;
-    height: 400px;
-    background: red;
-    color: white;
-    text-align: center;
-    line-height: 400px;
-    font-size: 24px;
-    border-radius: 50%;
-    cursor: pointer;
-    position: fixed;
-    top: calc(50% - 200px);
-    left: calc(50% - 200px);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 999;
-}
-
-/* CSS for the Quadrants */
-.quadrant {
-    position: fixed;
-    width: 50%;
-    height: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 999;
-}
-
-.quadrant img {
-    max-width: 100%;
-    max-height: 100%;
-}
-
-/* Hide the clickable circle and quadrants initially */
-.hidden {
-    display: none;
-}
 
 /* Styles for the home button icon */
 #close-button img {

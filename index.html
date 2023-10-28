@@ -36,24 +36,6 @@
         </script>   
         <script>
             $(document).ready(function () {
-                $("#about").on("click", function () {
-                    $("#about-content").toggleClass("active");
-                    // Show the clickable circle when the About link is clicked
-                    $("#clickable-circle").removeClass("hidden");
-                });
-
-                // Function to handle the clickable circle click event
-                $("#clickable-circle").on("click", function () {
-                    // Fade out the clickable circle
-                    $("#clickable-circle").fadeOut(400, function () {
-                        // After the fade out, show the quadrants
-                        $(".quadrant").removeClass("hidden");
-                    });
-                });
-            });
-        </script>
-        <script>
-            $(document).ready(function () {
                 // Function to show the "About" content and the close button
                 function showAboutContent() {
                     $("#about-content").addClass("active");
@@ -111,21 +93,6 @@
                 class="box2 onlywide animated bounceOutRight"
                 style="animation-delay: 1.7s"
             ></div>
-        </div>
-        <!-- Clickable Circle -->
-        <div id="clickable-circle" class="clickable-circle">Click</div>
-        <!-- Quadrants for Images -->
-        <div class="quadrant top-left">
-            <img src="./assets/media/image1.png" alt="Image 1">
-        </div>
-        <div class="quadrant top-right">
-            <img src="./assets/media/image2.png" alt="Image 2">
-        </div>
-        <div class="quadrant bottom-left">
-            <img src="./assets/media/image3.png" alt="Image 3">
-        </div>
-        <div class="quadrant bottom-right">
-            <img src="./assets/media/image4.png" alt="Image 4">
         </div>
         <div id="about-content" class="about-content">
             <!-- Your about content goes here -->
