@@ -31,6 +31,25 @@ body {
 #about-content.active {
     right: 0;
 }
+/* Styles for the close button */
+#close-button {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1001;
+    cursor: pointer;
+}
+
+/* Styles for the home button icon */
+#close-button img {
+    width: 30px; /* Adjust the width to your preferred size */
+}
+
+/* Hide the close button by default */
+#close-button.hidden {
+    display: none;
+}
+
 #loading {
     width: 100vw;
     height: 100vh;

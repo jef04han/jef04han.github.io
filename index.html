@@ -33,7 +33,32 @@
                     $("#about-content").toggleClass("active");
                 });
             });
-        </script>        
+        </script>   
+        <script>
+            $(document).ready(function () {
+                // Function to show the "About" content and the close button
+                function showAboutContent() {
+                    $("#about-content").addClass("active");
+                    $("#close-button").removeClass("hidden");
+                }
+
+                // Function to hide the "About" content and the close button
+                function hideAboutContent() {
+                    $("#about-content").removeClass("active");
+                    $("#close-button").addClass("hidden");
+                }
+
+                // Show the "About" content and the close button when the "About" link is clicked
+                $("#about").on("click", function () {
+                    showAboutContent();
+                });
+
+                // Hide the "About" content and the close button when the close button is clicked
+                $("#close-button").on("click", function () {
+                    hideAboutContent();
+                });
+            });
+        </script>     
         <link rel="stylesheet" href="/styles/index.css" />
     </head>
 
@@ -72,7 +97,9 @@
         <div id="about-content" class="about-content">
             <!-- Your about content goes here -->
         </div>
-
+        <div id="close-button" class="close-button">
+            <img src="path_to_home-icon.png" alt="Home" />
+        </div>        
         <div id="player">
             <audio autoplay hidden>
                 <source src="./assets/media/leoloop.mp3" type="audio/mpeg">
