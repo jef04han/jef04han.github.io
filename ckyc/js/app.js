@@ -118,7 +118,7 @@
 
   // ---------- views ----------
   function viewLogin() {
-    const chips = H.state.users.filter((u) => ['kyc.maker', 'branch.0123', 'branch.0456', 'branch.0789', 'admin', 'kyc.viewer'].includes(u.username)).map((u) => `
+    const chips = H.state.users.filter((u) => ['branch.0123', 'branch.0456', 'branch.0789', 'branch.0234', 'branch.0345', 'admin'].includes(u.username)).map((u) => `
       <button class="acct-chip" data-act="fill-login" data-u="${esc(u.username)}" data-p="${esc(u.password)}" type="button">
         <code>${esc(u.username)}</code><span class="pill plain">${esc(roleLabel(u))}</span>
         <small>${{ OPERATOR: 'Full workflow across all branches', BRANCH: `Sees only branch ${esc(u.dp)} (${esc((H.BRANCHES[u.dp] || {}).name || '')})`, ADMIN: 'Channels, API keys, users, statistics, simulate pushes', VIEWER: 'Read-only, all branches' }[u.role]}</small>
@@ -559,7 +559,7 @@
         </tbody></table></div><p class="small muted">Disable a channel, then push from it (Simulate or Data Fetch API) to see the 403.</p>`;
     } else if (t === 'users') {
       body = `<div class="table-wrap"><table class="rows"><thead><tr><th>User</th><th>Role</th><th>DP code</th><th></th></tr></thead><tbody>
-        ${H.state.users.map((u) => `<tr><td class="lead" data-label="User"><b class="mono">${esc(u.username)}</b><span class="sub">${esc(u.name)}</span></td><td data-label="Role">${esc(u.role)}</td><td data-label="DP code">${esc(u.dp || '—')}</td><td data-label="">${['admin', 'kyc.maker', 'branch.0123', 'branch.0456', 'branch.0789', 'kyc.viewer'].includes(u.username) ? '<span class="faint small">built-in</span>' : `<button class="btn sm danger" data-act="del-user" data-v="${esc(u.username)}">Remove</button>`}</td></tr>`).join('')}
+        ${H.state.users.map((u) => `<tr><td class="lead" data-label="User"><b class="mono">${esc(u.username)}</b><span class="sub">${esc(u.name)}</span></td><td data-label="Role">${esc(u.role)}</td><td data-label="DP code">${esc(u.dp || '—')}</td><td data-label="">${['admin', 'branch.0123', 'branch.0456', 'branch.0789', 'branch.0234', 'branch.0345'].includes(u.username) ? '<span class="faint small">built-in</span>' : `<button class="btn sm danger" data-act="del-user" data-v="${esc(u.username)}">Remove</button>`}</td></tr>`).join('')}
         </tbody></table></div>
         <h3 style="margin:18px 0 8px">Add user</h3>
         <form id="user-form" class="grid g4" style="align-items:end"><label class="field">Username<input name="u" required pattern="[a-z0-9._]+" /></label><label class="field">Name<input name="n" required /></label>
@@ -600,9 +600,9 @@
       ['Fatima Sheikh', 'Rejected update', 'First update attempt is rejected by the registry; resubmit and it goes through.'],
       ['Sunrise Agro Foods', 'Legal entity', 'Company account from DMS: CIN/PAN search, entity create.'],
     ];
-    const items = sc.map(([n, t, d], k) => { const a = findBy(n); return `<div class="scen"><span class="num">${k + 1}</span><div><h3>${esc(t)}</h3><p class="small muted" style="margin:4px 0 0">${esc(d)}</p></div>${a ? `<a class="btn sm" href="#/account/${a.id}">${esc(n)} →</a>` : '<span class="faint small">changed</span>'}</div>`; }).join('');
+    const items = sc.map(([n, t, d], k) => { const a = findBy(n); return `<div class="scen"><span class="num">${k + 1}</span><div><h3>${esc(t)}</h3><p class="small muted" style="margin:4px 0 0">${esc(d)}</p></div>${!a ? '<span class="faint small">changed</span>' : (user.role !== 'BRANCH' || a.branchCode === user.dp) ? `<a class="btn sm" href="#/account/${a.id}">${esc(n)} →</a>` : `<span class="small muted" style="text-align:right">${esc(n)}<br/>sign in as <span class="mono">branch.${esc(a.branchCode)}</span></span>`}</div>`; }).join('');
     return layout('guide', `<div class="pagehead"><div><h1>Demo guide</h1><p>Each sample account is set up to show one path through the CKYC 2.0 process.</p></div></div>
-      <div class="banner"><div><b>Tips:</b> sign in as <span class="mono">branch.0123</span>, <span class="mono">branch.0456</span> or <span class="mono">branch.0789</span> to see branch scoping, <span class="mono">kyc.viewer</span> for read-only, <span class="mono">admin</span> to push new accounts, rotate API keys or simulate a gateway outage. The palette icon switches to the classic MIS theme. ${user.role === 'ADMIN' ? '' : 'Reset the data from Administration (admin).'}</div></div>
+      <div class="banner"><div><b>Tips:</b> each <span class="mono">branch.xxxx</span> login sees only its own branch; sign in as <span class="mono">admin</span> to push new accounts, rotate API keys or simulate a gateway outage. The palette icon switches to the classic MIS theme. ${user.role === 'ADMIN' ? '' : 'Reset the data from Administration (admin).'}</div></div>
       <div class="card guide">${items}</div>`);
   }
 
