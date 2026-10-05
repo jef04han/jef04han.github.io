@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const STORE_KEY = 'ckycHubDemo.v2';
+  const STORE_KEY = 'ckycHubDemo.v3';
   const RE_ID = 'IN9999';
   const POLL_DELAY_MS = 4000;
 
@@ -23,15 +23,16 @@
     '0456': { name: 'Chennai - T Nagar', city: 'Chennai', state: 'TN', district: '603', pin: '600017' },
     '0789': { name: 'Bengaluru - Jayanagar', city: 'Bengaluru', state: 'KA', district: '572', pin: '560041' },
     '0234': { name: 'Delhi - Karol Bagh', city: 'New Delhi', state: 'DL', district: '090', pin: '110005' },
+    '0345': { name: 'Kolkata - Park Street', city: 'Kolkata', state: 'WB', district: '342', pin: '700016' },
   };
 
   const DEFAULT_USERS = [
-    { username: 'kyc.maker', password: 'user123', name: 'KYC Operator', role: 'OPERATOR' },
     { username: 'branch.0123', password: 'user123', name: 'Andheri branch desk', role: 'BRANCH', dp: '0123' },
     { username: 'branch.0456', password: 'user123', name: 'T Nagar branch desk', role: 'BRANCH', dp: '0456' },
     { username: 'branch.0789', password: 'user123', name: 'Jayanagar branch desk', role: 'BRANCH', dp: '0789' },
+    { username: 'branch.0234', password: 'user123', name: 'Karol Bagh branch desk', role: 'BRANCH', dp: '0234' },
+    { username: 'branch.0345', password: 'user123', name: 'Park Street branch desk', role: 'BRANCH', dp: '0345' },
     { username: 'admin', password: 'admin123', name: 'Hub Administrator', role: 'ADMIN' },
-    { username: 'kyc.viewer', password: 'user123', name: 'Auditor (read-only)', role: 'VIEWER' },
   ];
 
   const STATUS = {
@@ -150,7 +151,7 @@
   // ---------- persistence ----------
   let state = null;
   function load() {
-    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { state = JSON.parse(raw); if (state && state.v === 2) return state; } } catch (e) { /* storage unavailable */ }
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { state = JSON.parse(raw); if (state && state.v === 3) return state; } } catch (e) { /* storage unavailable */ }
     state = seed();
     save();
     return state;
@@ -795,13 +796,13 @@
   function seed() {
     const realState = state;
     state = {
-      v: 2, seq: 0, createdAt: iso(),
+      v: 3, seq: 0, createdAt: iso(),
       channels: CHANNELS.map((c, k) => ({ ...c, enabled: true, keyPrefix: 'ck_' + c.code.toLowerCase() + '_' + ['7f3a', '19c2', 'b84e', '0d51', 'e6a9'][k], keyRotatedAt: iso() })),
       users: clone(DEFAULT_USERS),
       accounts: [], intake: [], stats: { calls: [] },
       settings: { gatewayDown: false },
     };
-    const S = 'kyc.maker';
+    const S = 'seed';
     const H = 3600e3;
     const at = (hoursAgo, fn) => { clockOffset = hoursAgo * H; try { fn(); } finally { clockOffset = 0; } };
     const add = (hoursAgo, ch, payload, sim) => { let acc; at(hoursAgo, () => { intake(ch, payload, { sim }); acc = state.accounts[0]; }); return acc; };
@@ -901,10 +902,28 @@
     add(18, 'DMS_CA', legalPayload({ branch: '0123', name: 'Andheri Textiles Private Limited', constitution: 'C', doi: '21-08-2009', pan: 'AABCA3234M', gstin: '27AABCA3234M1Z2', idType: 'CIN', idNo: 'U17100MH2009PTC195512', addr: '14 MIDC Central Road', mobile: '9820834560', email: 'accounts@andheritextiles.example', accountNumber: '110123456617', cif: 'CIF1209112', parties: [{ name: 'Ramesh Agarwal', din: '02231190', ownership: 70, role: 'DIRECTOR' }, { name: 'Kavita Agarwal', din: '02231191', ownership: 30, role: 'DIRECTOR' }] }));
     void b1;
 
+    // Branch 0345 (Kolkata - Park Street)
+    add(27, 'TAB_SB', ind({ channel: 'TAB_SB', branch: '0345', first: 'Arnab', last: 'Ghosh', gender: 'M', father: 'Tapan', mother: 'Mala', dob: '11-03-1984', pan: 'BAGPG3456N', aadhaar4: '6582', mobile: '9830112233', addr: '17 Park Street', accountNumber: '110345000101', cif: 'CIF5500101' }));
+    const k2 = add(44, 'CPH_SB', ind({ channel: 'CPH_SB', branch: '0345', first: 'Moumita', last: 'Sen', gender: 'F', father: 'Dipak', mother: 'Sharmila', dob: '29-09-1993', pan: 'CMSPS4567P', aadhaar4: '7693', mobile: '9831223344', addr: '4 Camac Street', accountNumber: '110345000102', cif: 'CIF5500102' }), { create: 'PROBABLE_MATCH' });
+    at(43, () => { actSearch(k2, S); actCreate(k2, S); });
+    at(40, () => actPollCreate(k2, S, true));
+    const k3 = add(52, 'VCIP', ind({ channel: 'VCIP', branch: '0345', first: 'Sourav', last: 'Mukherjee', gender: 'M', father: 'Pranab', mother: 'Gita', dob: '06-12-1979', pan: 'DSMPM5678Q', aadhaar4: '8704', mobile: '9836334455', addr: '22 Elgin Road', accountNumber: '110345000103', cif: 'CIF5500103' }));
+    at(51, () => { actSearch(k3, S); actCreate(k3, S); });
+    at(48, () => actPollCreate(k3, S, true));
+    add(15, 'TAB_CA', ind({ channel: 'TAB_CA', branch: '0345', first: 'Paromita', last: 'Bose', gender: 'F', father: 'Ashok', mother: 'Ruma', dob: '18-07-1986', pan: 'EPBPB6789R', aadhaar4: '9815', mobile: '9874445566', addr: '9 Shakespeare Sarani', accountNumber: '110345000104', cif: 'CIF5500104', ckycNo: '50044455566677' }));
+
     // A few rejected pushes for the intake statistics.
     at(33, () => intake('TAB_SB', { eventId: uuid(), eventType: 'ACCOUNT_ACTIVATED', account: { accountNumber: '110123999999', branchCode: '0123' }, customerType: 'INDIVIDUAL', individual: { dob: '1990/01/01', identityProofs: [{ ovdType: 'E', ovdNo: '123412341234' }] }, documents: [] }));
     at(12, () => intake('VCIP', { eventId: uuid(), eventType: 'ACCOUNT_ACTIVATED', account: { accountNumber: '110456999998', branchCode: '0456' }, customerType: 'INDIVIDUAL', individual: { pan: { number: 'ABC123' } }, documents: [{ slot: 'SELFIE', b64Content: 'x' }] }));
 
+    // Seeded work is shown as done by each account's own branch desk.
+    state.stats.calls = [];
+    state.accounts.forEach((a) => {
+      const who = 'branch.' + a.branchCode;
+      [a.timeline, a.wire, a.submissions, a.consents].forEach((list) => list.forEach((x) => { if (x.actor === S) x.actor = who; if (x.user === S) x.user = who; }));
+      a.wire.forEach((w) => state.stats.calls.push({ at: w.at, endpoint: w.endpoint.split('/').slice(-1)[0], user: w.user, http: w.http }));
+    });
+    state.stats.calls.sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
     state.accounts.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     const out = state;
     state = realState;
