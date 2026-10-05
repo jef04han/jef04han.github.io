@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const STORE_KEY = 'ckycHubDemo.v1';
+  const STORE_KEY = 'ckycHubDemo.v2';
   const RE_ID = 'IN9999';
   const POLL_DELAY_MS = 4000;
 
@@ -28,6 +28,8 @@
   const DEFAULT_USERS = [
     { username: 'kyc.maker', password: 'user123', name: 'KYC Operator', role: 'OPERATOR' },
     { username: 'branch.0123', password: 'user123', name: 'Andheri branch desk', role: 'BRANCH', dp: '0123' },
+    { username: 'branch.0456', password: 'user123', name: 'T Nagar branch desk', role: 'BRANCH', dp: '0456' },
+    { username: 'branch.0789', password: 'user123', name: 'Jayanagar branch desk', role: 'BRANCH', dp: '0789' },
     { username: 'admin', password: 'admin123', name: 'Hub Administrator', role: 'ADMIN' },
     { username: 'kyc.viewer', password: 'user123', name: 'Auditor (read-only)', role: 'VIEWER' },
   ];
@@ -148,7 +150,7 @@
   // ---------- persistence ----------
   let state = null;
   function load() {
-    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { state = JSON.parse(raw); if (state && state.v === 1) return state; } } catch (e) { /* storage unavailable */ }
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { state = JSON.parse(raw); if (state && state.v === 2) return state; } } catch (e) { /* storage unavailable */ }
     state = seed();
     save();
     return state;
@@ -793,7 +795,7 @@
   function seed() {
     const realState = state;
     state = {
-      v: 1, seq: 0, createdAt: iso(),
+      v: 2, seq: 0, createdAt: iso(),
       channels: CHANNELS.map((c, k) => ({ ...c, enabled: true, keyPrefix: 'ck_' + c.code.toLowerCase() + '_' + ['7f3a', '19c2', 'b84e', '0d51', 'e6a9'][k], keyRotatedAt: iso() })),
       users: clone(DEFAULT_USERS),
       accounts: [], intake: [], stats: { calls: [] },
@@ -861,6 +863,43 @@
       actUpdate(kavitha, S, compare(kavitha).filter((r) => r.state === 'DIFFERENT' || r.state === 'NOT_IN_REGISTRY').map((r) => r.tag));
     });
     at(48, () => actPollUpdate(kavitha, S, true));
+
+    // More branch 0123 (Mumbai - Andheri) work for the branch login.
+    const A = (o) => ind(Object.assign({ branch: '0123', addr: o.addr || '10 Andheri Kurla Road' }, o));
+    const b1 = add(58, 'TAB_SB', A({ channel: 'TAB_SB', first: 'Aditya', last: 'Sharma', gender: 'M', father: 'Vinod', mother: 'Sunita', dob: '14-08-1992', pan: 'PASPS1123A', aadhaar4: '4471', mobile: '9821034567', addr: '204 Chakala Road', accountNumber: '110123456606', cif: 'CIF1209101' }));
+    const b2 = add(57, 'CPH_SB', A({ channel: 'CPH_SB', first: 'Pooja', last: 'Patil', gender: 'F', father: 'Dattatray', mother: 'Shobha', dob: '03-02-1995', pan: 'QPPPP2234B', aadhaar4: '5582', mobile: '9867123450', addr: '11 Marol Naka', accountNumber: '110123456607', cif: 'CIF1209102' }));
+    at(56, () => actSearch(b2, S));
+    const b3 = add(54, 'VCIP', A({ channel: 'VCIP', first: 'Imran', last: 'Qureshi', gender: 'M', father: 'Salim', mother: 'Shabana', dob: '27-11-1986', pan: 'RIQPQ3345C', aadhaar4: '6693', mobile: '9892045671', addr: '7 Saki Naka', accountNumber: '110123456608', cif: 'CIF1209103' }));
+    at(53, () => { actSearch(b3, S); actCreate(b3, S); });
+    const b4 = add(50, 'TAB_SB', A({ channel: 'TAB_SB', first: 'Neha', last: 'Joshi', gender: 'F', father: 'Prakash', mother: 'Medha', dob: '19-06-1994', pan: 'SNJPJ4456D', aadhaar4: '7704', mobile: '9819056782', addr: '33 JB Nagar', accountNumber: '110123456609', cif: 'CIF1209104' }), { create: 'PROBABLE_MATCH' });
+    at(49, () => { actSearch(b4, S); actCreate(b4, S); });
+    at(47, () => actPollCreate(b4, S, true));
+    const b5 = add(62, 'DMS_CA', A({ channel: 'DMS_CA', first: 'Sanjay', last: 'Desai', gender: 'M', father: 'Mahesh', mother: 'Nirmala', dob: '08-09-1978', pan: 'TSDPD5567E', aadhaar4: '8815', mobile: '9820167893', addr: '5 Sher-e-Punjab Colony', accountNumber: '110123456610', cif: 'CIF1209105' }));
+    at(61, () => { actSearch(b5, S); actCreate(b5, S); });
+    at(58, () => actPollCreate(b5, S, true));
+    const b6 = add(45, 'CPH_SB', A({ channel: 'CPH_SB', first: 'Anjali', last: 'Kapoor', gender: 'F', father: 'Rakesh', mother: 'Neelam', dob: '22-04-1990', pan: 'UAKPK6678F', aadhaar4: '9926', mobile: '9833278904', addr: '18 Four Bungalows', accountNumber: '110123456611', cif: 'CIF1209106' }), { create: 'REJECTED', reason: "Father's name does not match the OVD" });
+    at(44, () => { actSearch(b6, S); actCreate(b6, S); });
+    at(41, () => actPollCreate(b6, S, true));
+    const b7 = add(40, 'TAB_CA', A({ channel: 'TAB_CA', first: 'Joseph', last: 'Thomas', gender: 'M', father: 'Mathew', mother: 'Mary', dob: '30-01-1983', pan: 'VJTPT7789G', aadhaar4: '1037', mobile: '9869389015', addr: '2 Gilbert Hill Road', accountNumber: '110123456612', cif: 'CIF1209107' }), { create: 'CONFIRMED_MATCH' });
+    at(39, () => { actSearch(b7, S); actCreate(b7, S); });
+    at(37, () => actPollCreate(b7, S, true));
+    add(34, 'VCIP', A({ channel: 'VCIP', first: 'Ritu', last: 'Saxena', gender: 'F', father: 'Alok', mother: 'Kiran', dob: '12-12-1997', pan: 'WRSPS8890H', aadhaar4: '2148', mobile: '9930490126', photo: false, addr: '41 Seven Bungalows', accountNumber: '110123456613', cif: 'CIF1209108' }));
+    add(32, 'TAB_SB', A({ channel: 'TAB_SB', first: 'Harish', last: 'Banerjee', gender: 'M', father: 'Subrata', mother: 'Mitra', dob: '05-05-1980', pan: 'XHBPB9901J', aadhaar4: '3259', mobile: '9821501237', addr: '9 Veera Desai Road', accountNumber: '110123456614', cif: 'CIF1209109', ckycNo: '50033344455566' }));
+    const b10 = add(29, 'CPH_SB', A({ channel: 'CPH_SB', first: 'Swati', last: 'Chatterjee', gender: 'F', father: 'Amit', mother: 'Rupa', dob: '16-10-1988', pan: 'YSCPC1012K', aadhaar4: '4360', mobile: '9867612348', addr: '23 Azad Nagar', accountNumber: '110123456615', cif: 'CIF1209110', ckycNo: '50066677788899' }));
+    at(28, () => {
+      const c = consentStart(b10, S, 'OTP', 'FETCH_FOR_UPDATE');
+      consentComplete(b10, S, c.id, { otp: '123456' });
+      actUpdate(b10, S, compare(b10).filter((r) => r.state === 'DIFFERENT' || r.state === 'NOT_IN_REGISTRY').map((r) => r.tag));
+    });
+    const b11 = add(26, 'DMS_CA', A({ channel: 'DMS_CA', first: 'Gautam', last: 'Rao', gender: 'M', father: 'Srinivas', mother: 'Padma', dob: '25-07-1975', pan: 'ZGRPR2123L', aadhaar4: '5471', mobile: '9892723459', addr: '6 Lokhandwala Back Road', accountNumber: '110123456616', cif: 'CIF1209111', ckycNo: '50077788899900' }));
+    at(25, () => {
+      const c = consentStart(b11, S, 'FACEAUTH', 'FETCH_FOR_UPDATE', { factorType: 'DOB', authFactor: 'DOB XX-XX-1975' });
+      consentComplete(b11, S, c.id, { photo: true, evidenceName: 'face_capture.jpg' });
+      actUpdate(b11, S, compare(b11).filter((r) => r.state === 'DIFFERENT' || r.state === 'NOT_IN_REGISTRY').map((r) => r.tag));
+    });
+    at(23, () => actPollUpdate(b11, S, true));
+    add(18, 'DMS_CA', legalPayload({ branch: '0123', name: 'Andheri Textiles Private Limited', constitution: 'C', doi: '21-08-2009', pan: 'AABCA3234M', gstin: '27AABCA3234M1Z2', idType: 'CIN', idNo: 'U17100MH2009PTC195512', addr: '14 MIDC Central Road', mobile: '9820834560', email: 'accounts@andheritextiles.example', accountNumber: '110123456617', cif: 'CIF1209112', parties: [{ name: 'Ramesh Agarwal', din: '02231190', ownership: 70, role: 'DIRECTOR' }, { name: 'Kavita Agarwal', din: '02231191', ownership: 30, role: 'DIRECTOR' }] }));
+    void b1;
 
     // A few rejected pushes for the intake statistics.
     at(33, () => intake('TAB_SB', { eventId: uuid(), eventType: 'ACCOUNT_ACTIVATED', account: { accountNumber: '110123999999', branchCode: '0123' }, customerType: 'INDIVIDUAL', individual: { dob: '1990/01/01', identityProofs: [{ ovdType: 'E', ovdNo: '123412341234' }] }, documents: [] }));
