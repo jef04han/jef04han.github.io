@@ -31,7 +31,6 @@
     update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>',
     api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>',
     admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
-    guide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
     flow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="5" rx="1"/><rect x="15" y="4" width="6" height="5" rx="1"/><rect x="9" y="15" width="6" height="5" rx="1"/><path d="M6 9v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9M12 13v2"/></svg>',
     logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
     palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h9"/></svg>',
@@ -107,8 +106,7 @@
           <div class="label">Work</div>
           ${navHtml}
           <div class="sep"></div>
-          <div class="label">Demo</div>
-          <a href="#/guide" class="${active === 'guide' ? 'active' : ''}">${ICON.guide}<span>Demo guide</span></a>
+          <div class="label">About</div>
           <a href="#/process" class="${active === 'process' ? 'active' : ''}">${ICON.flow}<span>How it works</span></a>
         </nav>
         <main>${inner}</main>
@@ -164,8 +162,7 @@
     recent.sort((x, y) => Date.parse(y.t.at) - Date.parse(x.t.at));
     const recentHtml = recent.slice(0, 8).map(({ a, t }) => `<li class="${t.kind}"><a href="#/account/${a.id}"><b>${esc(H.summary(a).name)}</b></a> — ${esc(t.text)}<div class="meta">${esc(t.actor)} · ${ago(t.at)}</div></li>`).join('');
     return layout('overview', `
-      <div class="pagehead"><div><h1>Overview</h1><p>${user.role === 'BRANCH' ? `Branch ${esc(user.dp)} — ${esc((H.BRANCHES[user.dp] || {}).name || '')}` : 'Bank-wide CKYC work across all account-opening channels'}</p></div>
-        <a class="btn" href="#/guide">${ICON.guide} Demo guide</a></div>
+      <div class="pagehead"><div><h1>Overview</h1><p>${user.role === 'BRANCH' ? `Branch ${esc(user.dp)} — ${esc((H.BRANCHES[user.dp] || {}).name || '')}` : 'Bank-wide CKYC work across all account-opening channels'}</p></div></div>
       ${H.state.settings.gatewayDown ? '<div class="banner err"><b>Gateway outage simulation is ON.</b>&nbsp;Registry calls will fail with 503 until an admin turns it off.</div>' : ''}
       <div class="section-title"><span class="qtag create">CREATE</span><h2>Create Requests — customers with no CKYC number yet</h2></div>
       <div class="grid g4">${tiles('CREATE')}</div>
@@ -579,26 +576,7 @@
       <div class="card"><div class="tabs">${tabs.map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-act="admin-tab" data-v="${k}">${l}</button>`).join('')}</div><div class="card-body">${body}</div></div>`);
   }
 
-  // ---------- guide & process ----------
-  function findBy(name) { return H.state.accounts.find((a) => H.summary(a).name.startsWith(name)); }
-  function viewGuide() {
-    const sc = [
-      ['Rohan Bose', 'Happy path create', 'Search the registry (no hit) → create → wait a few seconds → check status → CKYC number issued. Then simulate a customer data change: the account moves to Update Requests.'],
-      ['Meera Pillai', 'Incomplete data', 'The channel push was accepted but the photo and mobile are missing — Create is disabled. Simulate a complete re-send and carry on.'],
-      ['Sneha Iyer', 'Probable match', 'The registry returned two look-alikes. Mark both "No match" and submit → the registry creates a new record on the next status check. (Mark one "Match" to see the confirmed-match path.)'],
-      ['Suresh Menon', 'Already on the registry', 'The de-dupe search finds an existing record. Download with consent (OTP 123456, or physical form / face auth) to obtain the CKYC number — no duplicate is created.'],
-      ['Vikram Rao', 'Confirmed match', 'The create came back CONFIRMED_MATCH. Obtain the CKYC number by consented download, or link one manually.'],
-      ['Karan Malhotra', 'Rejected', 'The registry rejected the create. Simulate the channel\'s corrected re-send, then search and create again.'],
-      ['Deepak Verma', 'Tag-level update', 'The channel sent a CKYC number, so this landed in Update Requests. Fetch the registry record (consent needed), compare tag by tag — differing tags are pre-selected — and send only those.'],
-      ['Fatima Sheikh', 'Rejected update', 'First update attempt is rejected by the registry; resubmit and it goes through.'],
-      ['Sunrise Agro Foods', 'Legal entity', 'Company account from DMS: CIN/PAN search, entity create.'],
-    ];
-    const items = sc.map(([n, t, d], k) => { const a = findBy(n); return `<div class="scen"><span class="num">${k + 1}</span><div><h3>${esc(t)}</h3><p class="small muted" style="margin:4px 0 0">${esc(d)}</p></div>${!a ? '<span class="faint small">changed</span>' : (user.role !== 'BRANCH' || a.branchCode === user.dp) ? `<a class="btn sm" href="#/account/${a.id}">${esc(n)} →</a>` : `<span class="small muted" style="text-align:right">${esc(n)}<br/>sign in as <span class="mono">branch.${esc(a.branchCode)}</span></span>`}</div>`; }).join('');
-    return layout('guide', `<div class="pagehead"><div><h1>Demo guide</h1><p>Each sample account is set up to show one path through the CKYC 2.0 process.</p></div></div>
-      <div class="banner"><div><b>Tips:</b> each <span class="mono">branch.xxxx</span> login sees only its own branch; sign in as <span class="mono">admin</span> to push new accounts, rotate API keys or simulate a gateway outage. The palette icon switches to the classic MIS theme. ${user.role === 'ADMIN' ? '' : 'Reset the data from Administration (admin).'}</div></div>
-      <div class="card guide">${items}</div>`);
-  }
-
+  // ---------- process ----------
   function viewProcess() {
     const box = (x, y, w, h, t, sub, fill, stroke) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="1.4"/><text x="${x + w / 2}" y="${y + (sub ? h / 2 - 3 : h / 2 + 4)}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#182033">${t}</text>${sub ? `<text x="${x + w / 2}" y="${y + h / 2 + 13}" text-anchor="middle" font-size="10.5" fill="#5d6880">${sub}</text>` : ''}`;
     const arr = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8a93a8" stroke-width="1.5" marker-end="url(#ah)"/>`;
@@ -735,7 +713,6 @@
       case 'account': html = viewAccount(parts[1]); break;
       case 'api': html = viewApi(); break;
       case 'admin': html = viewAdmin(); break;
-      case 'guide': html = viewGuide(); break;
       case 'process': html = viewProcess(); break;
       default: html = viewOverview();
     }

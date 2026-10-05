@@ -289,10 +289,6 @@ pre.json { margin: 0; padding: 12px; background: #0f1729; color: #d6e2ff; border
 .acct-chip code { font-weight: 500; }
 .acct-chip small { color: var(--muted); grid-column: 1 / -1; }
 
-.guide li { margin-bottom: 10px; }
-.guide .scen { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: start; padding: 14px 16px; border-bottom: 1px solid var(--border); }
-.guide .scen:last-child { border-bottom: 0; }
-.guide .num { width: 28px; height: 28px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; display: grid; place-items: center; font-size: 13px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
