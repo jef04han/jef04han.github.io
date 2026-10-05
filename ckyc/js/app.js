@@ -97,7 +97,6 @@
     return `
       <header class="topbar">
         <a class="brand" href="#/overview">${MARK}<span class="txt">CKYC 2.0 Hub</span></a>
-        <span class="badge-demo" title="All data is simulated and stays in this browser">DEMO</span>
         <span class="spacer"></span>
         <button class="iconbtn" data-act="theme" title="Switch theme (default / classic MIS)" aria-label="Switch theme">${ICON.palette}</button>
         <div class="userchip"><span class="avatar">${esc(initials(user.name))}</span><span class="who">${esc(user.name)}<small>${esc(roleLabel(user))}</small></span></div>
@@ -126,18 +125,13 @@
     return `
       <div class="login">
         <section class="hero">
-          <div class="brand" style="color:#fff">${MARK.replace('class="mark"', 'class="mark" style="background:rgba(255,255,255,.15)"')}<span>CKYC 2.0 Hub</span></div>
-          <div>
-            <span class="badge-demo">INTERACTIVE DEMO</span>
-            <h1>One hub for Central KYC create &amp; update — for every account-opening channel.</h1>
-            <p>Channels push activated accounts to one Data Fetch API. Operators work two queues — Create Requests and Update Requests — and the Hub talks to the CKYC 2.0 registry through the bank's API gateway: de-dupe search, create, status polling, match adjudication, consented download and tag-level updates.</p>
-          </div>
-          <div class="flow"><span>DMS · TAB · CPH · VCIP</span><i>→</i><span>Data Fetch API</span><i>→</i><span>CKYC Hub</span><i>→</i><span>API gateway</span><i>→</i><span>CKYC registry</span></div>
+          <div class="hero-mark">${MARK}</div>
+          <h1>CKYC 2.0 Hub</h1>
         </section>
         <section class="form">
           <div class="box">
             <h2 style="font-size:20px">Sign in</h2>
-            <p class="muted" style="margin:6px 0 0">Pick a demo account — each role sees a different console.</p>
+            <p class="muted" style="margin:6px 0 0">Select your login.</p>
             <div class="acct-chips">${chips}</div>
             <form id="login-form" class="stack" autocomplete="off">
               <label class="field">Username<input name="u" id="lu" required /></label>
@@ -145,7 +139,6 @@
               <div id="login-err" class="small" style="color:var(--err)"></div>
               <button class="btn primary" style="width:100%" type="submit">Sign in</button>
             </form>
-            <p class="small faint" style="margin-top:18px">Demo build: the registry and gateway are simulated in your browser. All customers are fictional and nothing is sent anywhere.</p>
           </div>
         </section>
       </div>`;
