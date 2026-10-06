@@ -733,6 +733,130 @@
     </svg>`;
   }
 
+  // ---------- Process flow: create & update via the new internal portal ----------
+  const PF_ICON = {
+    tab: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>',
+    kiosk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="13" rx="2"/><path d="M8 6h8M9 15v7M15 15v7M7 22h10"/></svg>',
+    person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>',
+    video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/></svg>',
+    db: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 13v-3M12 13V7M16 13v-5M9 21h6M12 17v4"/></svg>',
+    maker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7 1.5 0 2.9.5 4 1.3"/><circle cx="18" cy="17" r="3"/><path d="M18 12v2M18 20v2M13 17h2M21 17h2"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>',
+    api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15l1.5-6 1.5 6M7.6 13h1.8M12 15V9h1.5a1.5 1.5 0 0 1 0 3H12M17 9v6"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  };
+  const pfStep = (icon, text) => `<div class="pf-step">${icon ? `<span class="pf-ic">${PF_ICON[icon]}</span>` : ''}<span>${text}</span></div>`;
+  const pfDown = '<div class="pf-down" aria-hidden="true">↓</div>';
+  function pfStatus(kind) {
+    const upd = kind === 'update';
+    return `<div class="pf-diamond">Status result</div>
+      <div class="pf-out">
+        <div class="pf-o ok"><b>Approved</b><span>→ ${upd ? 'Update completed' : 'CKYC ID created'}</span><span>→ Pass to CBS</span></div>
+        <div class="pf-o warn"><b>Rejected</b><span>→ Show reason</span><span>→ Take action</span></div>
+        <div class="pf-o bad"><b>Probable match</b><span>→ Get matched records (CKYC ID, name, match type only)</span><span>→ Download all records info (controlled)</span></div>
+      </div>`;
+  }
+
+  function portalFlowHtml() {
+    const ch = [['tab', 'TAB'], ['phone', 'INSTA'], ['kiosk', 'KIOSK'], ['person', 'CPH'], ['video', 'VCIP']];
+    return `
+      <div class="pf-banner"><h2>CKYC 2.0 — Process Flow (Create &amp; Update via New Internal Portal)</h2>
+        <div class="pf-tags"><span>Account opening continues in individual channels</span><span>Create / update data collected centrally</span><span>Branch Maker actions through new portal</span><span>Centralised CKYC master</span></div></div>
+
+      <div class="pf-top">
+        <div class="pf-card ch"><h3><i>1</i>Individual account opening channels <small>(data collection)</small></h3>
+          <div class="pf-chips">${ch.map(([i, l]) => `<div class="pf-chip"><span>${PF_ICON[i]}</span>${l}</div>`).join('')}</div>
+          <div class="pf-note">During account opening, the channel collects CKYC <b>create / update</b> data (as per CKYC 2.0 requirements) and sends it through <b>one common API</b>.</div>
+          <div class="pf-dash"><b>API payload includes</b><ul><li>All CKYC create / update fields (as per API guide)</li><li>Documents / images (if captured)</li><li>Channel details, reference number, etc.</li></ul></div></div>
+        <div class="pf-arrow" aria-hidden="true">→</div>
+        <div class="pf-card svc"><h3><i>2</i>Centralised CKYC service</h3>
+          <div class="pf-box">Receives data from all channels through one API (Create / Update)</div>${pfDown}
+          <div class="pf-db">${PF_ICON.db}<b>CKYC Master Table</b><span>(centralised)</span></div>${pfDown}
+          <div class="pf-box">Stores all create / update data for further processing</div></div>
+        <div class="pf-arrow" aria-hidden="true">→</div>
+        <div class="pf-card ch"><h3><i>3</i>Continue account opening <small>(existing channel flow)</small></h3>
+          <div class="pf-box">Channel completes the remaining account opening steps (e.g. Aadhaar, PAN, documents) and submits the application.</div>${pfDown}
+          <div class="pf-box"><b>Account activation</b><br/><small>(after successful verification)</small></div>${pfDown}
+          <div class="pf-box solid">Customer becomes bank customer</div></div>
+        <div class="pf-arrow" aria-hidden="true">→</div>
+        <div class="pf-card ch"><h3><i>4</i>CPH dashboard <small>(pending count)</small></h3>
+          <div class="pf-big">${PF_ICON.chart}</div>
+          <div class="pf-note">CPH can view pending <b>Create / Update</b> cases (branch-wise) with count.</div></div>
+        <div class="pf-arrow" aria-hidden="true">→</div>
+        <div class="pf-card portal"><h3><i>5</i>New internal portal <small>(for Branch Maker)</small></h3>
+          <div class="pf-big">${PF_ICON.maker}</div>
+          <div class="pf-note">Branch Maker logs in, views pending cases (Create / Update) for their branch and performs the required action.</div></div>
+        <div class="pf-arrow" aria-hidden="true">→</div>
+        <div class="pf-done">${PF_ICON.check}<b>CKYC Create / Update completed</b></div>
+      </div>
+
+      <div class="pf-divider"><span>Flow inside new internal portal (Branch Maker)</span></div>
+
+      <div class="pf-bottom">
+        <div class="pf-card portal"><h3><i>6</i>Portal login &amp; view pending cases</h3>
+          ${pfStep('maker', '<b>Branch Maker login</b><br/><small>(branch-wise)</small>')}${pfDown}
+          <div class="pf-box left"><b>Dashboard</b><ul><li>Pending Create cases</li><li>Pending Update cases</li><li>View by customer / channel / date</li></ul></div>${pfDown}
+          <div class="pf-box"><b>Select a case</b><div class="pf-btns"><span class="c">Create</span><span class="u">Update</span></div></div>
+          <div class="pf-note small">(Data already collected from channels and stored in CKYC Master)</div></div>
+
+        <div class="pf-card create"><h3><i>7</i>Create flow <small>(new CKYC record)</small></h3>
+          ${pfStep('api', 'Call CKYC <b>Create</b> API')}${pfDown}
+          ${pfStep('clock', 'Call <b>Create Status</b> API')}${pfDown}
+          ${pfStatus('create')}${pfDown}
+          <div class="pf-box left">${PF_ICON.maker.replace('<svg', '<svg class="pf-inline"')}<b>Maker action (in portal)</b><ul><li>Select correct record / no match</li><li>If all no match → new CKYC ID</li><li>If one match → use existing CKYC ID</li></ul></div>${pfDown}
+          ${pfStep('clock', 'Call Create Status API (again)')}${pfDown}
+          ${pfStep('person', 'On final approval → pass CKYC ID to CBS')}</div>
+
+        <div class="pf-card update"><h3><i>8</i>Update flow <small>(existing CKYC record)</small></h3>
+          ${pfStep('api', 'Call CKYC <b>Update</b> API')}${pfDown}
+          ${pfStep('clock', 'Call <b>Update Status</b> API')}${pfDown}
+          ${pfStatus('update')}${pfDown}
+          <div class="pf-box left">${PF_ICON.maker.replace('<svg', '<svg class="pf-inline"')}<b>Maker action (in portal)</b><ul><li>Select correct record / no match</li><li>If all no match → update with new details</li><li>If one match → update with selected CKYC ID</li></ul></div>${pfDown}
+          ${pfStep('clock', 'Call Update Status API (again)')}${pfDown}
+          ${pfStep('person', 'On final approval → pass CKYC ID to CBS')}</div>
+
+        <div class="pf-card portal"><h3><i>9</i>Retry search / download <small>(for API failure cases)</small></h3>
+          <div class="pf-box alert">${PF_ICON.warn.replace('<svg', '<svg class="pf-inline"')}If Search / Download API fails</div>${pfDown}
+          <div class="pf-box">Show message to user<br/><small>(technical issue / retry option)</small></div>${pfDown}
+          <div class="pf-box">User can retry<br/><small>(Search / Download)</small></div>${pfDown}
+          <div class="pf-box"><b>If still failing</b><br/>→ Treat as Create case<br/><small>(proceed with Create flow)</small></div></div>
+
+        <div class="pf-card info"><h3><i>10</i>Key points &amp; business rules</h3><ol class="pf-list">
+          <li>Centralised CKYC Master Table will store all create / update data from all channels (via one API).</li>
+          <li>Search &amp; Download will continue in individual channels (TAB, INSTA, KIOSK, CPH, VCIP).</li>
+          <li>New portal is only for Branch Maker to handle Create / Update cases.</li>
+          <li>CPH dashboard will show pending count branch-wise.</li>
+          <li>CKYC ID is generated only after the customer becomes a bank customer (post account activation).</li>
+          <li>Maker intervention is required for Create / Update (especially for probable match cases).</li>
+          <li>For probable match, only CKYC ID, name and match type are available initially. Full details to be downloaded in a controlled manner (PII security).</li>
+          <li>All 5 search methods are supported: CKYC ID · OVD · Mobile · Name + Photo · Name + DOB + Relation.</li></ol></div>
+
+        <div class="pf-card ok"><h3><i>11</i>Why we need this portal</h3><ul class="pf-why">
+          <li><b>Development effort reduced</b> — only 6 APIs (Create + Update) to integrate once, instead of in all channels.</li>
+          <li><b>Faster delivery</b> — avoids multiple vendor dependencies and channel-wise development.</li>
+          <li>Centralised control and monitoring of CKYC create / update cases.</li>
+          <li>CKYC ID is generated only after the customer is a bank customer.</li>
+          <li>Improves security and data control for probable match records.</li></ul></div>
+      </div>
+
+      <div class="grid g2 pf-qs">
+        <div class="pf-card query"><h3>Important query points <small>(require confirmation)</small></h3><ol class="pf-list">
+          <li>After how much time should we call Create Status API after Create API?</li>
+          <li>After Create Action API, should we call Create Status API again? If yes, how long to get the final status?</li>
+          <li>Can probable match records appear again after Create Action?</li>
+          <li>For face-to-face authentication, how to get the CKYC ID of employees? Is there any process / API?</li>
+          <li>Can CKYC Create API be called before account activation (Maker level)? If yes, any restrictions?</li>
+          <li>If not, what should be the flow? Who will handle probable match and user intervention?</li></ol></div>
+        <div class="pf-card info"><h3>Additional clarification needed</h3><ul class="pf-why">
+          <li>Should we use CKYC / CERSAI data or CBS data for account opening when both differ (ETB cases)?</li>
+          <li>If PAN verified = true in CKYC download, can we skip PAN validation in TAB?</li>
+          <li>Any other business rules / edge cases to be considered?</li></ul></div>
+      </div>`;
+  }
+
   function viewProcess() {
     const rows = [
       ['CKYC Search & Download (during the journey)', '=', 'In each channel', 'Stays in each channel — no change'],
@@ -768,7 +892,9 @@
     return layout('process', `
       <div class="pagehead"><div><h1>How it works</h1><p>One ${PKG} for CKYC create and update — instead of building them into every account-opening channel.</p></div>
         <button class="btn noprint" data-act="print">Print / Save as PDF</button></div>
-      <nav class="jump noprint"><a href="#why" data-act="jump">Why a separate central package</a><a href="#ind" data-act="jump">Individual flow</a><a href="#ent" data-act="jump">Non-individual flow</a><a href="#roles" data-act="jump">Channel vs package</a><a href="#arch" data-act="jump">Architecture</a></nav>
+      <nav class="jump noprint"><a href="#portalflow" data-act="jump">Process flow (new internal portal)</a><a href="#why" data-act="jump">Why a separate central package</a><a href="#ind" data-act="jump">Individual flow</a><a href="#ent" data-act="jump">Non-individual flow</a><a href="#roles" data-act="jump">Channel vs package</a><a href="#arch" data-act="jump">Architecture</a></nav>
+
+      <section id="portalflow" class="psec pf">${portalFlowHtml()}</section>
 
       <section id="why" class="psec">
         <div class="grid g3 pitch">
