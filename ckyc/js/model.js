@@ -5,14 +5,14 @@
 (function () {
   'use strict';
 
-  const STORE_KEY = 'ckycHubDemo.v3';
+  const STORE_KEY = 'ckycHubDemo.v4';
   const RE_ID = 'IN9999';
   const POLL_DELAY_MS = 4000;
 
   // ---------- reference data ----------
   const CHANNELS = [
-    { code: 'DMS_CA', name: 'DMS — Current Account', product: 'Current account', types: 'Individual, Legal entity' },
-    { code: 'TAB_CA', name: 'TAB Current Account', product: 'Current account', types: 'Individual (proprietor), Legal entity' },
+    { code: 'DMS_CA', name: 'DMS — Current Account', product: 'Current account', types: 'Individual, Non-individual (with authorised signatories)' },
+    { code: 'TAB_CA', name: 'TAB Current Account', product: 'Current account', types: 'Individual (proprietor)' },
     { code: 'CPH_SB', name: 'Savings Account CPH', product: 'Savings bank', types: 'Individual' },
     { code: 'TAB_SB', name: 'TAB Savings Account', product: 'Savings bank', types: 'Individual' },
     { code: 'VCIP', name: 'VCIP (video KYC)', product: 'Savings bank', types: 'Individual' },
@@ -45,6 +45,7 @@
     UPDATE_REQUIRED: { queue: 'UPDATE', label: 'Update required', bucket: 'action', desc: 'Registry needs our data' },
     UPDATE_PENDING: { queue: 'UPDATE', label: 'Update pending', bucket: 'waiting', desc: 'Update submitted; awaiting registry' },
     CKYC_UPDATED: { queue: 'UPDATE', label: 'CKYC updated', bucket: 'done', desc: 'Registry accepted the update' },
+    AWAITING_AUS: { queue: '*', label: 'Waiting for AUS', bucket: 'waiting', desc: 'Non-individual: held until every authorised signatory has a CKYC ID' },
     REJECTED: { queue: '*', label: 'Rejected', bucket: 'rejected', desc: 'Registry rejected the last submission' },
   };
 
@@ -105,6 +106,7 @@
       T('Contact', 'contactDetails.primary.mobile.number', 'legal.contact.primary.mobile.number', 'Mobile'),
       T('Contact', 'contactDetails.primary.email.address', 'legal.contact.primary.email.address', 'Email'),
       T('Related parties', 'relatedParties', 'legal.relatedParties', 'Directors / partners (whole list)'),
+      T('Related parties', 'relatedPersons', 'legal.authorisedSignatories', 'Authorised signatories with CKYC IDs (whole list)'),
       T('Documents', 'identityProof.documents', 'documents.IDENTITY_PROOF', 'Identity proof images', false),
     ],
   };
@@ -141,6 +143,7 @@
       return v.map((x) => {
         if (x && x.ovdType) return `${OVD_TYPES[x.ovdType] || x.ovdType}: ${x.ovdType === 'E' ? 'XXXX-XXXX-' + x.ovdNo : x.ovdNo}`;
         if (x && x.name) return `${x.name}${x.din ? ' (DIN ' + x.din + ')' : ''}${x.ownership ? ' ' + x.ownership + '%' : ''}`;
+        if (x && x.individual) return `${ausName(x)}${x.designation ? ' (' + x.designation + ')' : ''}: ${x.ckycNo || 'no CKYC ID'}`;
         return typeof x === 'object' ? JSON.stringify(x) : String(x);
       }).join('; ');
     }
@@ -151,7 +154,7 @@
   // ---------- persistence ----------
   let state = null;
   function load() {
-    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { state = JSON.parse(raw); if (state && state.v === 3) return state; } } catch (e) { /* storage unavailable */ }
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { state = JSON.parse(raw); if (state && state.v === 4) return state; } } catch (e) { /* storage unavailable */ }
     state = seed();
     save();
     return state;
@@ -208,6 +211,13 @@
     return p;
   }
 
+  // One authorised signatory inside a non-individual push: either a CKYC ID,
+  // or the full individual KYC data + documents so the package can create one.
+  function ausEntry(branch, a) {
+    const ip = individualPayload(Object.assign({ channel: 'DMS_CA', branch, accountNumber: 'AUS', cif: '', addr: a.addr || '1 Main Road', email: `${a.first}.${a.last}@example.com`.toLowerCase() }, a));
+    return { designation: a.designation || 'Director', ckycNo: a.ckycNo || null, individual: ip.individual, documents: ip.documents };
+  }
+
   function legalPayload(o) {
     const br = BRANCHES[o.branch];
     return {
@@ -229,6 +239,7 @@
         principalAddress: { sameAsRegistered: true },
         contact: { primary: { mobile: { countryCode: '+91', number: o.mobile }, email: { address: o.email } } },
         relatedParties: o.parties,
+        authorisedSignatories: (o.aus || []).map((a) => ausEntry(o.branch, a)),
       },
       documents: [
         { slot: 'PAN_CARD', fileName: 'pan.pdf', contentType: 'pdf', b64Content: 'demo' },
@@ -263,6 +274,18 @@
     }, extra));
   }
 
+  const ENT = [['Lotus', 'Private Limited', 'C', 'CIN'], ['Meridian', 'LLP', 'L', 'LLPIN'], ['Sagar', 'Private Limited', 'C', 'CIN'], ['Vertex', 'LLP', 'L', 'LLPIN'], ['Pragati', 'Private Limited', 'C', 'CIN']];
+  const TRADE = ['Traders', 'Exports', 'Engineering', 'Foods', 'Logistics', 'Pharma', 'Textiles'];
+  function randomLegal(branch, ausTotal = 2, ausWithId = 0) {
+    const [w, suffix, cons, idType] = pick(ENT);
+    const pan = randomPan('X', cons === 'L' ? 'F' : 'C');
+    const aus = Array.from({ length: ausTotal }, (_, k) => {
+      const gender = Math.random() < 0.5 ? 'M' : 'F'; const first = pick(gender === 'M' ? FIRST_M : FIRST_F); const last = pick(LAST);
+      return { first, last, gender, father: pick(FIRST_M), mother: pick(FIRST_F), dob: `${String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')}-0${1 + Math.floor(Math.random() * 9)}-19${60 + Math.floor(Math.random() * 30)}`, pan: randomPan(last), aadhaar4: digits(4), mobile: '9' + digits(9), designation: cons === 'L' ? 'Designated Partner' : 'Director', ckycNo: k < ausWithId ? digits(14) : null };
+    });
+    return legalPayload({ branch, name: `${w} ${pick(TRADE)} ${suffix}`, constitution: cons, doi: `${String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')}-0${1 + Math.floor(Math.random() * 9)}-20${10 + Math.floor(Math.random() * 14)}`, pan, gstin: '27' + pan + '1Z' + digits(1), idType, idNo: idType === 'CIN' ? 'U' + digits(5) + 'MH20' + digits(2) + 'PTC' + digits(6) : 'AA' + pick(['A', 'B', 'C']) + '-' + digits(4), addr: `${1 + Math.floor(Math.random() * 90)} ${pick(STREETS)}`, mobile: '9' + digits(9), email: `accounts@${w.toLowerCase()}.example`, accountNumber: '11' + branch + digits(6), cif: 'CIF' + digits(7), parties: aus.map((a) => ({ name: a.first + ' ' + a.last, din: digits(8), role: 'DIRECTOR' })), aus });
+  }
+
   // ---------- validation & readiness ----------
   const DATE_RE = /^\d{2}-\d{2}-\d{4}$/;
   const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -295,7 +318,13 @@
     if (p.customerType === 'LEGAL') {
       const l = p.legal;
       if (!l) e('legal', 'Required for LEGAL');
-      else if (l.pan && l.pan.number && !PAN_RE.test(l.pan.number)) e('legal.pan.number', 'Invalid PAN format');
+      else {
+        if (l.pan && l.pan.number && !PAN_RE.test(l.pan.number)) e('legal.pan.number', 'Invalid PAN format');
+        (l.authorisedSignatories || []).forEach((a, k) => {
+          if (a.ckycNo && !/^\d{14}$/.test(String(a.ckycNo))) e(`legal.authorisedSignatories[${k}].ckycNo`, 'Must be 14 digits');
+          if (!a.ckycNo && !(a.individual && a.individual.name && a.individual.name.firstName)) e(`legal.authorisedSignatories[${k}].individual`, 'Full individual KYC data required when the AUS has no CKYC ID');
+        });
+      }
     }
     (p.documents || []).forEach((d, k) => {
       const slots = DOC_SLOTS[p.customerType] || [];
@@ -327,6 +356,7 @@
       if (!getPath(l, 'pan.number')) block.push('Entity PAN missing');
       if (!getPath(l, 'registeredAddress.line1')) block.push('Registered address missing');
       if (!getPath(l, 'contact.primary.mobile.number')) block.push('Primary mobile missing');
+      if (!(l.authorisedSignatories || []).length) block.push('At least one authorised signatory (AUS) required');
       if (!(l.relatedParties || []).length) adv.push('No related parties listed');
     }
     return { ready: block.length === 0, block, adv };
@@ -365,6 +395,7 @@
     if (!ch) return finish(401, { accepted: false, message: 'Unknown API key' }, 'REJECTED');
     if (!ch.enabled) return finish(403, { accepted: false, message: `Channel ${channelCode} is disabled` }, 'REJECTED');
     const errors = validate(payload);
+    if (payload && payload.customerType === 'LEGAL' && channelCode !== 'DMS_CA') errors.push({ path: 'customerType', message: 'Non-individual (LEGAL) accounts are accepted only from DMS_CA' });
     if (errors.length) { ev.errors = errors; return finish(400, { accepted: false, message: 'Validation failed', errors }, 'REJECTED'); }
 
     const dup = state.accounts.find((a) => a.channel === channelCode && a.eventIds.includes(payload.eventId));
@@ -385,12 +416,21 @@
         if (opts.fixScenario) acc.sim.create = 'APPROVED';
       }
       addTimeline(acc, channelCode, `Data re-sent by channel (${payload.eventType}); data version ${acc.dataVersion}` + (acc.queue === 'UPDATE' ? ' — queued for registry update' : ''), 'intake');
+      if (acc.customerType === 'LEGAL') setupAus(acc, channelCode, opts);
       return finish(200, { accepted: true, outcome: 'UPDATED', account: pub(acc) }, 'UPDATED');
     }
 
+    acc = makeAccount(channelCode, payload, opts.sim);
+    addTimeline(acc, channelCode, `Account received via Data Fetch API (${payload.eventType}) → ${acc.queue === 'CREATE' ? 'Create Requests' : 'Update Requests (CKYC no. supplied)'}`, 'intake');
+    if (acc.customerType === 'LEGAL') setupAus(acc, channelCode, opts);
+    state.accounts.unshift(acc);
+    return finish(201, { accepted: true, outcome: 'CREATED', account: pub(acc) }, 'CREATED');
+  }
+
+  function makeAccount(channelCode, payload, sim) {
     state.seq += 1;
     const ckycNo = (payload.ckyc && payload.ckyc.ckycNo) || null;
-    acc = {
+    const acc = {
       id: 'A' + String(state.seq).padStart(5, '0'),
       channel: channelCode, accountNumber: payload.account.accountNumber, branchCode: payload.account.branchCode,
       customerType: payload.customerType, payload: clone(payload), eventIds: [payload.eventId], dataVersion: 1,
@@ -399,13 +439,68 @@
       submittedAt: null, registry: null, fetched: null, consentOnFile: false,
       receivedAt: iso(), updatedAt: iso(),
       timeline: [], submissions: [], wire: [], consents: [], notes: [],
-      sim: Object.assign({ create: 'APPROVED', update: 'APPROVED' }, opts.sim || {}),
+      sim: Object.assign({ create: 'APPROVED', update: 'APPROVED' }, sim || {}),
     };
     if (ckycNo) acc.registry = driftedRecord(acc.payload); // already on the registry, with older data
-    addTimeline(acc, channelCode, `Account received via Data Fetch API (${payload.eventType}) → ${acc.queue === 'CREATE' ? 'Create Requests' : 'Update Requests (CKYC no. supplied)'}`, 'intake');
-    state.accounts.unshift(acc);
-    return finish(201, { accepted: true, outcome: 'CREATED', account: pub(acc) }, 'CREATED');
+    return acc;
   }
+
+  // ---------- non-individual: authorised signatories first ----------
+  // Each AUS without a CKYC ID becomes its own Create Request linked to the
+  // entity; the entity is held (AWAITING_AUS) until every AUS has a CKYC ID.
+  function ausName(a) { const n = (a.individual && a.individual.name) || {}; return [n.firstName, n.lastName].filter(Boolean).join(' ') || '(signatory)'; }
+
+  function setupAus(ent, actor, opts = {}) {
+    const list = (ent.payload.legal && ent.payload.legal.authorisedSignatories) || [];
+    const prev = ent.aus || [];
+    ent.aus = list.map((a, k) => {
+      const pan = getPath(a, 'individual.pan.number') || '';
+      const old = prev.find((x) => (pan && x.pan === pan) || (!pan && x.name === ausName(a)));
+      return { idx: k, name: ausName(a), pan, designation: a.designation || '', ckycNo: a.ckycNo || (old && old.ckycNo) || null, childId: old ? old.childId : null };
+    });
+    ent.aus.forEach((x, k) => {
+      if (x.ckycNo || x.childId) return;
+      const a = list[k];
+      const p = {
+        eventId: uuid(), eventType: 'ACCOUNT_ACTIVATED', occurredAt: iso(),
+        account: Object.assign({}, ent.payload.account, { accountNumber: `${ent.accountNumber}-AUS${k + 1}`, productName: `Authorised signatory — ${displayName(ent.payload)}` }),
+        customerType: 'INDIVIDUAL',
+        ckyc: { ckycNo: null, ckycRefNo: null, consentGiven: true, consentDate: ddmmyyyy() },
+        attestation: clone(ent.payload.attestation),
+        individual: clone(a.individual), documents: clone(a.documents || []),
+      };
+      const child = makeAccount(ent.channel, p, (opts.ausSim && opts.ausSim[k]) || {});
+      child.parentId = ent.id; child.ausIndex = k;
+      addTimeline(child, actor, `Authorised signatory (${x.designation || 'AUS'}) of ${displayName(ent.payload)} — no CKYC ID, so a Create Request was raised. The entity's CKYC waits for this.`, 'intake');
+      state.accounts.unshift(child);
+      x.childId = child.id;
+    });
+    const pending = ent.aus.filter((x) => !x.ckycNo).length;
+    if (pending && !['CREATE_PENDING', 'UPDATE_PENDING', 'CKYC_CREATED', 'CKYC_UPDATED'].includes(ent.status)) {
+      if (ent.status !== 'AWAITING_AUS') addTimeline(ent, actor, `Held: ${pending} of ${ent.aus.length} authorised signatories have no CKYC ID yet — their Create Requests must complete first`, 'warn');
+      ent.status = 'AWAITING_AUS';
+    } else syncAus(ent, actor);
+  }
+
+  function syncAus(ent, actor) {
+    if (!ent || !ent.aus) return;
+    ent.aus.forEach((x) => {
+      const c = x.childId && findAccount(x.childId);
+      if (c && c.ckycNo && !x.ckycNo) {
+        x.ckycNo = c.ckycNo;
+        const a = getPath(ent.payload, 'legal.authorisedSignatories') || [];
+        if (a[x.idx]) a[x.idx].ckycNo = c.ckycNo;
+        addTimeline(ent, actor, `Authorised signatory ${x.name} now has CKYC ID ${c.ckycNo}`, 'ok');
+      }
+    });
+    const pending = ent.aus.filter((x) => !x.ckycNo).length;
+    if (!pending && ent.status === 'AWAITING_AUS') {
+      ent.status = ent.ckycNo ? 'UPDATE_REQUIRED' : 'RECEIVED';
+      addTimeline(ent, actor, `All ${ent.aus.length} authorised signatories have CKYC IDs — entity released for CKYC ${ent.ckycNo ? 'update' : 'create'}`, 'ok');
+    }
+  }
+
+  function childGotCkyc(child, actor) { if (child.parentId) syncAus(findAccount(child.parentId), actor); }
 
   function pub(acc) { return { id: acc.id, accountNumber: acc.accountNumber, queue: acc.queue, ckycStatus: acc.status, ckycNo: acc.ckycNo, dataVersion: acc.dataVersion }; }
 
@@ -517,6 +612,7 @@
         identityProof: { ...l.identityProof, documents: ['<IDENTITY_PROOF redacted>'] },
         addressDetails: { registeredAddress: l.registeredAddress, principalAddress: l.principalAddress },
         contactDetails: l.contact, relatedParties: l.relatedParties, attestationDetails: p.attestation,
+        relatedPersons: (l.authorisedSignatories || []).map((a) => ({ relation: 'AUTHORISED_SIGNATORY', designation: a.designation, ckycNo: a.ckycNo })),
       });
     }
     return out;
@@ -554,6 +650,7 @@
       acc.ckycNo = ckycNo; acc.status = 'CKYC_CREATED'; acc.registry = partyOf(acc.payload); acc.consentOnFile = true;
       if (sub) { sub.status = 'APPROVED'; sub.result = 'CKYC no. ' + ckycNo; }
       addTimeline(acc, user, `Registry APPROVED — CKYC number ${ckycNo} issued`, 'ok');
+      childGotCkyc(acc, user);
     } else if (sc === 'PROBABLE_MATCH') {
       const s = summary(acc);
       const parts = s.name.split(' ');
@@ -606,6 +703,7 @@
     acc.ckycNo = ckycNo; acc.queue = 'UPDATE'; acc.status = 'UPDATE_REQUIRED';
     acc.registry = acc.registry || driftedRecord(acc.payload);
     addTimeline(acc, user, `CKYC number ${ckycNo} linked manually → moved to Update Requests`, 'ok');
+    childGotCkyc(acc, user);
     save();
   }
 
@@ -686,6 +784,7 @@
     if (purpose === 'OBTAIN_CKYC') {
       acc.ckycNo = rec.ckycNo; acc.queue = 'UPDATE'; acc.status = 'UPDATE_REQUIRED';
       addTimeline(acc, user, `Registry record downloaded — CKYC number ${rec.ckycNo} obtained → moved to Update Requests`, 'ok');
+      childGotCkyc(acc, user);
     } else {
       addTimeline(acc, user, 'Current registry record fetched for comparison', 'ok');
     }
@@ -796,7 +895,7 @@
   function seed() {
     const realState = state;
     state = {
-      v: 3, seq: 0, createdAt: iso(),
+      v: 4, seq: 0, createdAt: iso(),
       channels: CHANNELS.map((c, k) => ({ ...c, enabled: true, keyPrefix: 'ck_' + c.code.toLowerCase() + '_' + ['7f3a', '19c2', 'b84e', '0d51', 'e6a9'][k], keyRotatedAt: iso() })),
       users: clone(DEFAULT_USERS),
       accounts: [], intake: [], stats: { calls: [] },
@@ -835,13 +934,21 @@
 
     add(30, 'VCIP', ind({ channel: 'VCIP', branch: '0123', first: 'Meera', last: 'Pillai', gender: 'F', father: 'Gopal', mother: 'Radha', dob: '05-08-1998', pan: 'GMPPP3345H', aadhaar4: '8812', mobile: '', noMobile: true, photo: false, addr: '14 Versova Link Road', accountNumber: '110123456604', cif: 'CIF1209012' }));
 
-    add(28, 'DMS_CA', legalPayload({ branch: '0789', name: 'Sunrise Agro Foods Private Limited', constitution: 'C', doi: '14-02-2012', pan: 'AAECS4471K', gstin: '29AAECS4471K1Z5', idType: 'CIN', idNo: 'U15400KA2012PTC062211', addr: '41 2nd Cross, Jayanagar', mobile: '9845011223', email: 'accounts@sunriseagro.example', accountNumber: '110789000302', cif: 'CIF3301190', parties: [{ name: 'Harsha Gowda', din: '05521190', ownership: 60, role: 'DIRECTOR' }, { name: 'Leela Gowda', din: '05521191', ownership: 40, role: 'DIRECTOR' }] }));
+    add(28, 'DMS_CA', legalPayload({ branch: '0789', name: 'Sunrise Agro Foods Private Limited', constitution: 'C', doi: '14-02-2012', pan: 'AAECS4471K', gstin: '29AAECS4471K1Z5', idType: 'CIN', idNo: 'U15400KA2012PTC062211', addr: '41 2nd Cross, Jayanagar', mobile: '9845011223', email: 'accounts@sunriseagro.example', accountNumber: '110789000302', cif: 'CIF3301190', parties: [{ name: 'Harsha Gowda', din: '05521190', ownership: 60, role: 'DIRECTOR' }, { name: 'Leela Gowda', din: '05521191', ownership: 40, role: 'DIRECTOR' }],
+      aus: [
+        { first: 'Harsha', last: 'Gowda', gender: 'M', father: 'Ramaiah', mother: 'Lakshmamma', dob: '10-04-1972', pan: 'BHGPG1190A', aadhaar4: '1190', mobile: '9845011224', designation: 'Director', ckycNo: '50021212121212' },
+        { first: 'Leela', last: 'Gowda', gender: 'F', father: 'Shivappa', mother: 'Gowramma', dob: '22-11-1976', pan: 'CLGPG1191B', aadhaar4: '1191', mobile: '9845011225', designation: 'Director' },
+      ] }));
 
     add(20, 'TAB_SB', ind({ channel: 'TAB_SB', branch: '0456', first: 'Suresh', last: 'Menon', gender: 'M', father: 'Krishnan', mother: 'Devi', dob: '17-04-1970', pan: 'HSMPM9910B', aadhaar4: '2246', mobile: '9444012345', addr: '6 Thyagaraya Road', accountNumber: '110456789003', cif: 'CIF2209177' }), { create: 'CONFIRMED_MATCH' });
 
     add(16, 'CPH_SB', ind({ channel: 'CPH_SB', branch: '0234', first: 'Lakshmi', last: 'Krishnan', gender: 'F', father: 'Raman', mother: 'Janaki', dob: '28-09-1982', pan: 'JLKPK2207S', aadhaar4: '9034', mobile: '9810234567', addr: '31 Arya Samaj Road', accountNumber: '110234500102', cif: 'CIF4400890' }), { create: 'PROBABLE_MATCH' });
 
-    const blue = add(64, 'DMS_CA', legalPayload({ branch: '0456', name: 'Bluewave Logistics LLP', constitution: 'L', doi: '03-06-2018', pan: 'AAKFB2210R', gstin: '33AAKFB2210R1Z9', idType: 'LLPIN', idNo: 'AAK-4410', addr: '88 Harbour Road', mobile: '9840155667', email: 'finance@bluewave.example', accountNumber: '110456789004', cif: 'CIF2209190', parties: [{ name: 'Joseph Mathew', din: '07710032', ownership: 50, role: 'PARTNER' }, { name: 'Ayesha Khan', din: '07710033', ownership: 50, role: 'PARTNER' }] }));
+    const blue = add(64, 'DMS_CA', legalPayload({ branch: '0456', name: 'Bluewave Logistics LLP', constitution: 'L', doi: '03-06-2018', pan: 'AAKFB2210R', gstin: '33AAKFB2210R1Z9', idType: 'LLPIN', idNo: 'AAK-4410', addr: '88 Harbour Road', mobile: '9840155667', email: 'finance@bluewave.example', accountNumber: '110456789004', cif: 'CIF2209190', parties: [{ name: 'Joseph Mathew', din: '07710032', ownership: 50, role: 'PARTNER' }, { name: 'Ayesha Khan', din: '07710033', ownership: 50, role: 'PARTNER' }],
+      aus: [
+        { first: 'Joseph', last: 'Mathew', gender: 'M', father: 'Mathew', mother: 'Annamma', dob: '14-02-1980', pan: 'DJMPM2032C', aadhaar4: '2032', mobile: '9840155668', designation: 'Designated Partner', ckycNo: '50031313131313' },
+        { first: 'Ayesha', last: 'Khan', gender: 'F', father: 'Irfan', mother: 'Zeenat', dob: '30-08-1984', pan: 'EAKPK2033D', aadhaar4: '2033', mobile: '9840155669', designation: 'Designated Partner', ckycNo: '50031313131314' },
+      ] }));
     at(63, () => { actSearch(blue, S); actCreate(blue, S); });
     at(60, () => actPollCreate(blue, S, true));
 
@@ -899,7 +1006,17 @@
       actUpdate(b11, S, compare(b11).filter((r) => r.state === 'DIFFERENT' || r.state === 'NOT_IN_REGISTRY').map((r) => r.tag));
     });
     at(23, () => actPollUpdate(b11, S, true));
-    add(18, 'DMS_CA', legalPayload({ branch: '0123', name: 'Andheri Textiles Private Limited', constitution: 'C', doi: '21-08-2009', pan: 'AABCA3234M', gstin: '27AABCA3234M1Z2', idType: 'CIN', idNo: 'U17100MH2009PTC195512', addr: '14 MIDC Central Road', mobile: '9820834560', email: 'accounts@andheritextiles.example', accountNumber: '110123456617', cif: 'CIF1209112', parties: [{ name: 'Ramesh Agarwal', din: '02231190', ownership: 70, role: 'DIRECTOR' }, { name: 'Kavita Agarwal', din: '02231191', ownership: 30, role: 'DIRECTOR' }] }));
+    const andheri = add(18, 'DMS_CA', legalPayload({ branch: '0123', name: 'Andheri Textiles Private Limited', constitution: 'C', doi: '21-08-2009', pan: 'AABCA3234M', gstin: '27AABCA3234M1Z2', idType: 'CIN', idNo: 'U17100MH2009PTC195512', addr: '14 MIDC Central Road', mobile: '9820834560', email: 'accounts@andheritextiles.example', accountNumber: '110123456617', cif: 'CIF1209112', parties: [{ name: 'Ramesh Agarwal', din: '02231190', ownership: 70, role: 'DIRECTOR' }, { name: 'Kavita Agarwal', din: '02231191', ownership: 30, role: 'DIRECTOR' }],
+      aus: [
+        { first: 'Ramesh', last: 'Agarwal', gender: 'M', father: 'Mohanlal', mother: 'Savitri', dob: '05-01-1968', pan: 'FRAPA3190E', aadhaar4: '3190', mobile: '9820834561', designation: 'Managing Director', addr: '8 Juhu Scheme' },
+        { first: 'Kavita', last: 'Agarwal', gender: 'F', father: 'Suresh', mother: 'Usha', dob: '19-07-1972', pan: 'GKAPA3191F', aadhaar4: '3191', mobile: '9820834562', designation: 'Director', addr: '8 Juhu Scheme' },
+      ] }));
+    {
+      const kids = state.accounts.filter((a) => a.parentId === andheri.id).sort((a, b) => a.ausIndex - b.ausIndex);
+      at(17, () => { actSearch(kids[0], S); actCreate(kids[0], S); });
+      at(15, () => actPollCreate(kids[0], S, true));
+      at(14, () => { actSearch(kids[1], S); actCreate(kids[1], S); });
+    }
     void b1;
 
     // Branch 0345 (Kolkata - Park Street)
@@ -935,7 +1052,7 @@
     get state() { return state; },
     load, save, reset, uuid, iso, getPath, fmtVal, maskPan, sha256, digits,
     validate, readiness, summary, displayName, visibleAccounts, findAccount, intake, statusReadBack,
-    randomIndividual, individualPayload, legalPayload,
+    randomIndividual, randomLegal, individualPayload, legalPayload,
     actSearch, actCreate, actPollCreate, actAdjudicate, actLink, downloadInitiate, downloadOnFile, consentStart, consentComplete, consentFail, factorOk,
     compare, actUpdate, actPollUpdate, simulateResend, addNote, HubError,
   };
