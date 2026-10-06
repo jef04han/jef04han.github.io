@@ -148,7 +148,7 @@
     const tiles = (q) => {
       const k = q.toLowerCase();
       return [
-        ['action', 'Need action', '#d98a00'], ['waiting', 'Awaiting registry', '#1d5fbf'], ['done', 'Done', '#18794e'], ['rejected', 'Rejected', '#b42318'],
+        ['action', 'Need action', '#d98a00'], ['waiting', 'Waiting (registry / AUS)', '#1d5fbf'], ['done', 'Done', '#18794e'], ['rejected', 'Rejected', '#b42318'],
       ].map(([b, l, col]) => `<a class="kpi" href="#/queue/${k}?b=${b}"><div class="l"><span class="dot" style="background:${col}"></span>${l}</div><div class="n">${c[q][b]}</div></a>`).join('');
     };
     const chCards = H.CHANNELS.map((ch) => {
@@ -226,12 +226,12 @@
     list.sort((x, y) => Date.parse(y.updatedAt) - Date.parse(x.updatedAt));
     const statuses = Object.keys(H.STATUS).filter((k) => H.STATUS[k].queue === Q || H.STATUS[k].queue === '*');
     const link = (patch) => { const n = Object.assign({}, q, patch); Object.keys(n).forEach((k) => { if (!n[k]) delete n[k]; }); const s = Object.keys(n).map((k) => k + '=' + encodeURIComponent(n[k])).join('&'); return `#/queue/${queue}${s ? '?' + s : ''}`; };
-    const chips = [['all', 'All'], ['action', 'Needs action'], ['waiting', 'Awaiting registry'], ['done', 'Done'], ['rejected', 'Rejected']]
+    const chips = [['all', 'All'], ['action', 'Needs action'], ['waiting', 'Waiting (registry / AUS)'], ['done', 'Done'], ['rejected', 'Rejected']]
       .map(([k, l]) => `<a class="chip ${b === k ? 'on' : ''}" href="${link({ b: k === 'all' ? '' : k, st: '' })}">${l}<span class="c">${byBucket[k]}</span></a>`).join('');
     const rows = list.map((a) => {
       const m = H.summary(a);
       return `<tr class="click" data-href="#/account/${a.id}">
-        <td class="lead" data-label="Customer"><b>${esc(m.name)}</b><span class="sub">${a.customerType === 'LEGAL' ? 'Legal entity' : 'Individual'} · ${esc(a.payload.account.customerId || '')}</span></td>
+        <td class="lead" data-label="Customer"><b>${esc(m.name)}</b><span class="sub">${a.parentId ? `Authorised signatory of ${esc(parentName(a))}` : a.customerType === 'LEGAL' ? `Non-individual · ${a.aus ? a.aus.filter((x) => x.ckycNo).length + '/' + a.aus.length + ' AUS with CKYC ID' : ''}` : 'Individual · ' + esc(a.payload.account.customerId || '')}</span></td>
         <td data-label="Account" class="mono">${esc(a.accountNumber)}</td>
         <td data-label="Channel">${esc(a.channel)}</td>
         <td data-label="Branch">${esc(a.branchCode)}<span class="sub">${esc((H.BRANCHES[a.branchCode] || {}).name || '')}</span></td>
@@ -270,7 +270,7 @@
     if (a.queue === 'CREATE') {
       const order = ['RECEIVED', 'SEARCHED', 'CREATE_PENDING', 'OUTCOME'];
       const labels = ['Received', 'Searched', 'Submitted', 'Outcome'];
-      let cur = { RECEIVED: 0, SEARCHED: 1, CREATE_PENDING: 2, PROBABLE_MATCH: 3, CONFIRMED_MATCH: 3, CKYC_CREATED: 4, REJECTED: 3 }[a.status];
+      let cur = { AWAITING_AUS: 0, RECEIVED: 0, SEARCHED: 1, CREATE_PENDING: 2, PROBABLE_MATCH: 3, CONFIRMED_MATCH: 3, CKYC_CREATED: 4, REJECTED: 3 }[a.status];
       return order.map((_, k) => `<span class="step ${k < cur ? 'done' : k === cur ? 'cur' : ''}">${labels[k]}</span>`).join('');
     }
     const labels = ['Fetched from registry', 'Tags compared', 'Submitted', 'Updated'];
@@ -286,7 +286,34 @@
         : `<ul class="checklist">${items.join('')}</ul><p class="small muted" style="margin:8px 0 0">Create stays disabled until the channel re-sends complete data. The push was not rejected — activation is never blocked.</p>`}</div>`;
   }
 
+  const parentName = (a) => { const p = a.parentId && H.findAccount(a.parentId); return p ? H.summary(p).name : ''; };
+
+  // Non-individual: the authorised signatories and where each one stands.
+  function ausHtml(a) {
+    if (!a.aus) return '';
+    const done = a.aus.filter((x) => x.ckycNo).length;
+    const rows = a.aus.map((x) => {
+      const c = x.childId && H.findAccount(x.childId);
+      const state = x.ckycNo ? `<span class="pill done">CKYC ID ${esc(x.ckycNo)}</span>` : c ? pill(c.status) : '<span class="pill rejected">No CKYC ID</span>';
+      const how = x.ckycNo && !c ? 'Had a CKYC ID at account opening' : c ? (x.ckycNo ? 'CKYC ID created by the package' : 'Create Request raised for this signatory') : '';
+      return `<tr><td class="lead" data-label="Signatory"><b>${esc(x.name)}</b><span class="sub">${esc(x.designation)}${x.pan ? ' · PAN ' + esc(H.maskPan(x.pan)) : ''}</span></td><td data-label="CKYC">${state}</td><td data-label="" class="small muted">${how}</td>
+        <td data-label="">${c ? (canSee(c) ? `<a class="btn sm" href="#/account/${c.id}">Open →</a>` : `<span class="small faint">branch ${esc(c.branchCode)}</span>`) : ''}</td></tr>`;
+    }).join('');
+    return `<div style="margin-top:18px"><div class="row between" style="margin-bottom:8px"><h3>Authorised signatories (AUS)</h3><span class="small muted">${done} of ${a.aus.length} have a CKYC ID</span></div>
+      <div class="card table-wrap" style="box-shadow:none"><table class="rows"><thead><tr><th>Signatory</th><th>CKYC</th><th>Source</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+  const canSee = (c) => user.role !== 'BRANCH' || c.branchCode === user.dp;
+
   function actionPanel(a) {
+    const head = a.parentId ? `<div class="banner"><div><b>Authorised signatory of <a href="#/account/${a.parentId}">${esc(parentName(a))}</a>.</b> The entity's CKYC ${H.findAccount(a.parentId) && H.findAccount(a.parentId).status === 'AWAITING_AUS' ? 'is on hold until this signatory gets a CKYC ID' : 'no longer waits for this signatory'}.</div></div>` : '';
+    if (a.status === 'AWAITING_AUS') {
+      const pending = a.aus.filter((x) => !x.ckycNo).length;
+      return `<div class="banner warn"><div><b>Waiting for authorised signatories.</b> A non-individual's CKYC record can be created only after every authorised signatory has a CKYC ID. ${pending} of ${a.aus.length} still need one — complete their Create Requests below. This account is released automatically when the last one gets its CKYC ID.</div></div>${ausHtml(a)}`;
+    }
+    return head + actionPanelInner(a) + (a.customerType === 'LEGAL' ? ausHtml(a) : '');
+  }
+
+  function actionPanelInner(a) {
     const s = a.status;
     const dis = disabledAttr();
     const r = H.readiness(a.payload);
@@ -395,7 +422,7 @@
       party = kv([['Name', [i.name.title, i.name.firstName, i.name.middleName, i.name.lastName].filter(Boolean).join(' ')], ["Father's name", [i.fatherName.firstName, i.fatherName.lastName].join(' ')], ["Mother's name", i.motherName ? [i.motherName.firstName, i.motherName.lastName].join(' ') : ''], ['Date of birth', i.dob], ['Gender', i.gender], ['PAN', i.pan && i.pan.number], ['Residential status', i.residentialStatus], ['Identity proofs', H.fmtVal(i.identityProofs)], ['Address as per OVD', [ad.line1, ad.line2, ad.city, ad.state, ad.pincode].filter(Boolean).join(', ')], ['Current address', i.currentAddress.sameAsAddressAsPerOvd ? 'Same as OVD address' : H.fmtVal(i.currentAddress)], ['Mobile', i.contact.mobile.number ? i.contact.mobile.countryCode + ' ' + i.contact.mobile.number : ''], ['Email', i.contact.email.address]]);
     } else {
       const l = p.legal; const ad = l.registeredAddress;
-      party = kv([['Entity name', l.entity.name], ['Constitution', l.entity.constitutionType], ['Date of registration', l.entity.dateOfRegistration], ['PAN', l.pan.number], ['GSTIN', l.taxIdentification && l.taxIdentification.number], [l.identityProof.type, l.identityProof.number], ['Registered address', [ad.line1, ad.city, ad.state, ad.pincode].join(', ')], ['Mobile', l.contact.primary.mobile.number], ['Email', l.contact.primary.email.address], ['Related parties', H.fmtVal(l.relatedParties)]]);
+      party = kv([['Entity name', l.entity.name], ['Constitution', l.entity.constitutionType], ['Date of registration', l.entity.dateOfRegistration], ['PAN', l.pan.number], ['GSTIN', l.taxIdentification && l.taxIdentification.number], [l.identityProof.type, l.identityProof.number], ['Registered address', [ad.line1, ad.city, ad.state, ad.pincode].join(', ')], ['Mobile', l.contact.primary.mobile.number], ['Email', l.contact.primary.email.address], ['Related parties', H.fmtVal(l.relatedParties)], ['Authorised signatories', H.fmtVal(l.authorisedSignatories)]]);
     }
     return `<div class="grid g2"><div><h3 style="margin-bottom:8px">${p.customerType === 'LEGAL' ? 'Entity' : 'Customer'}</h3>${party}</div><div class="stack"><div><h3 style="margin-bottom:8px">Account</h3>${acct}</div><div><h3 style="margin-bottom:8px">Attestation &amp; consent</h3>${att}</div></div></div>
       <details style="margin-top:16px"><summary class="small" style="cursor:pointer;color:var(--primary)">Show raw JSON as received (data version ${a.dataVersion})</summary><pre class="json" style="margin-top:8px">${json(p)}</pre></details>`;
@@ -463,6 +490,7 @@
 
   // ---------- Data Fetch API page ----------
   function sampleBody(kind) {
+    if (kind === 'legal') return JSON.stringify(H.randomLegal('0123', 2, 1), null, 2);
     const ch = 'TAB_SB';
     const p = H.randomIndividual(ch, '0123');
     if (kind === 'invalid') {
@@ -491,6 +519,7 @@
             <li><b>(channel, accountNumber)</b> identifies the account — a new eventId refreshes the data and bumps dataVersion.</li>
             <li>ckycNo supplied → <b>Update Requests</b>; otherwise <b>Create Requests</b>.</li>
             <li>Dates DD-MM-YYYY; Aadhaar: last 4 digits only.</li>
+            <li><b>Non-individual (LEGAL)</b> is accepted only from <b>DMS_CA</b>. <span class="mono">legal.authorisedSignatories[]</span>: each AUS with a <span class="mono">ckycNo</span>, or full individual KYC data + documents. AUS without a CKYC ID get their own Create Request; the entity waits until all have one.</li>
             <li>Structural errors → 400 with <span class="mono">{path, message}</span>. Missing CKYC data does <b>not</b> reject — it shows as readiness items.</li>
           </ul></div></div>
         <div class="card"><div class="card-head"><h2>Responses</h2></div><div class="card-body table-wrap"><table><tbody>
@@ -498,10 +527,10 @@
       </div>
 
       <div class="card" style="margin-top:16px"><div class="card-head"><h2>Try it</h2>
-        <div class="row"><button class="btn sm" data-act="api-sample" data-v="valid">New customer</button><button class="btn sm" data-act="api-sample" data-v="incomplete">Incomplete data</button><button class="btn sm" data-act="api-sample" data-v="existing">With CKYC no.</button><button class="btn sm" data-act="api-sample" data-v="invalid">Invalid</button></div></div>
+        <div class="row"><button class="btn sm" data-act="api-sample" data-v="valid">New customer</button><button class="btn sm" data-act="api-sample" data-v="incomplete">Incomplete data</button><button class="btn sm" data-act="api-sample" data-v="existing">With CKYC no.</button><button class="btn sm" data-act="api-sample" data-v="legal">Non-individual (DMS_CA)</button><button class="btn sm" data-act="api-sample" data-v="invalid">Invalid</button></div></div>
         <div class="card-body grid g2">
           <div><div class="row" style="margin-bottom:8px"><span class="mono small">POST /api/v1/accounts/activated</span><span class="spacer" style="flex:1"></span>
-            <label class="small muted">X-Api-Key of&nbsp;<select id="api-ch">${H.state.channels.map((c) => `<option value="${c.code}" ${c.code === 'TAB_SB' ? 'selected' : ''}>${c.code}</option>`).join('')}</select></label></div>
+            <label class="small muted">X-Api-Key of&nbsp;<select id="api-ch">${H.state.channels.map((c) => `<option value="${c.code}" ${c.code === (ui.apiCh || 'TAB_SB') ? 'selected' : ''}>${c.code}</option>`).join('')}</select></label></div>
             <textarea id="api-body" rows="22" spellcheck="false">${esc(ui.apiBody)}</textarea>
             <div class="row" style="margin-top:10px"><button class="btn primary" data-act="api-send" ${disabledAttr()}>Send</button><span class="small muted">Send twice to see idempotency.</span></div></div>
           <div><div class="small muted" style="margin-bottom:8px">Response</div>
@@ -535,6 +564,8 @@
       body = `<form id="sim-form" class="grid g3" style="align-items:end">
         <label class="field">Channel<select name="ch">${H.state.channels.map((c) => `<option value="${c.code}">${c.code} — ${esc(c.name)}</option>`).join('')}</select></label>
         <label class="field">Branch (DP code)<select name="br">${Object.entries(H.BRANCHES).map(([k, v]) => `<option value="${k}">${k} — ${esc(v.name)}</option>`).join('')}</select></label>
+        <label class="field">Customer type<select name="ty"><option value="IND">Individual</option><option value="LEGAL">Non-individual (DMS_CA only)</option></select></label>
+        <label class="field">AUS (non-individual)<select name="aus"><option value="2:0">2 signatories, none with CKYC ID</option><option value="2:1" selected>2 signatories, 1 with CKYC ID</option><option value="3:1">3 signatories, 1 with CKYC ID</option><option value="2:2">2 signatories, both with CKYC ID</option></select></label>
         <label class="field">Registry outcome to simulate<select name="sc"><option value="APPROVED">Approved (CKYC no. issued)</option><option value="PROBABLE_MATCH">Probable match</option><option value="CONFIRMED_MATCH">Confirmed match (already on registry)</option><option value="REJECTED">Rejected</option><option value="EXISTING">Customer already has CKYC no. (update)</option></select></label>
         <label class="check"><input type="checkbox" name="inc" /> Incomplete data (no photo / mobile)</label>
         <div></div>
@@ -755,7 +786,7 @@
       </section>
 
       <section id="ent" class="psec">
-        <div class="card"><div class="card-head"><h2>Non-individual customer — process flow</h2><span class="small muted">AUS first, then the entity</span></div>
+        <div class="card"><div class="card-head"><h2>Non-individual customer — process flow</h2><span class="small muted">DMS Current Account only — AUS first, then the entity</span></div>
           <div class="card-body table-wrap diagram">${entityFlowSvg()}</div>
           <div class="card-body" style="border-top:1px solid var(--border)">${stepList(entSteps)}</div></div>
       </section>
@@ -931,7 +962,7 @@
       case 'cmp-none': ui.cmp[a.id].sel.clear(); render(); break;
       case 'update': { const sel = Array.from(ui.cmp[a.id].sel); run(() => { H.actUpdate(a, U, sel); delete ui.cmp[a.id]; }, `Update submitted with ${sel.length} tag(s)`); break; }
       // API page
-      case 'api-sample': ui.apiBody = sampleBody(v); ui.apiResp = null; render(); break;
+      case 'api-sample': ui.apiBody = sampleBody(v); ui.apiCh = v === 'legal' ? 'DMS_CA' : 'TAB_SB'; ui.apiResp = null; render(); break;
       case 'api-send': {
         const txt = document.getElementById('api-body').value; ui.apiBody = txt;
         let body; try { body = JSON.parse(txt); } catch (e) { ui.apiResp = { http: 400, body: { accepted: false, message: 'Malformed JSON: ' + e.message } }; render(); break; }
@@ -1048,9 +1079,11 @@
       render(); return;
     }
     if (f.id === 'sim-form') {
-      const ch = f.ch.value; const br = f.br.value; const sc = f.sc.value;
-      const p = H.randomIndividual(ch, br, sc === 'EXISTING' ? { ckycNo: H.digits(14) } : {});
-      if (f.inc.checked) { p.documents = p.documents.filter((d) => d.slot !== 'PHOTO'); p.individual.contact.mobile.number = ''; }
+      const ch = f.ty.value === 'LEGAL' ? 'DMS_CA' : f.ch.value; const br = f.br.value; const sc = f.sc.value;
+      let p;
+      if (f.ty.value === 'LEGAL') { const [n, w] = f.aus.value.split(':').map(Number); p = H.randomLegal(br, n, w); if (sc === 'EXISTING') p.ckyc.ckycNo = H.digits(14); }
+      else p = H.randomIndividual(ch, br, sc === 'EXISTING' ? { ckycNo: H.digits(14) } : {});
+      if (f.inc.checked && p.individual) { p.documents = p.documents.filter((d) => d.slot !== 'PHOTO'); p.individual.contact.mobile.number = ''; }
       const r = H.intake(ch, p, { sim: { create: sc === 'EXISTING' ? 'APPROVED' : sc } });
       ui.simResult = { http: r.http, ...r.body };
       toast(r.http < 300 ? `Pushed ${H.displayName(p)} from ${ch} (HTTP ${r.http})` : `Refused: HTTP ${r.http}`, r.http < 300 ? 'ok' : 'err');
