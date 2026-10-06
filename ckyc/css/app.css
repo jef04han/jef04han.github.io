@@ -290,6 +290,32 @@ pre.json { margin: 0; padding: 12px; background: #0f1729; color: #d6e2ff; border
 .acct-chip small { color: var(--muted); grid-column: 1 / -1; }
 
 
+/* ---------- how it works ---------- */
+.psec { margin-top: 20px; scroll-margin-top: 70px; }
+.jump { display: flex; gap: 6px; flex-wrap: wrap; }
+.jump a { border: 1px solid var(--border-strong); background: var(--surface); border-radius: 99px; padding: 5px 12px; font-size: 12.5px; font-weight: 550; color: var(--muted); }
+.jump a:hover { color: var(--primary); border-color: var(--primary); text-decoration: none; }
+.pitch .big { font-size: 34px; font-weight: 700; color: var(--primary); line-height: 1; margin-bottom: 4px; }
+.pitch p { margin: 6px 0 0; }
+.diagram svg { display: block; max-width: 1000px; margin: 0 auto; }
+.steplist { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.steplist .sl { border-left: 3px solid var(--primary); padding: 2px 0 2px 12px; }
+.steplist .sl p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.olist { margin: 0; padding-left: 20px; }
+.olist li { margin-bottom: 6px; }
+@media print {
+  .topbar, .sidenav, .noprint, #toasts { display: none !important; }
+  .shell { display: block; }
+  main { padding: 0; max-width: none; }
+  body { background: #fff; }
+  .card { box-shadow: none; break-inside: avoid; }
+  .psec { margin-top: 14px; }
+  .grid.g3.pitch { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pagehead { margin-bottom: 8px; }
+  .diagram svg { min-width: 0 !important; }
+  .table-wrap { overflow: visible; }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
   .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -303,6 +329,7 @@ pre.json { margin: 0; padding: 12px; background: #0f1729; color: #d6e2ff; border
   .sidenav .sep, .sidenav .label { display: none; }
   main { padding: 16px 16px 60px; }
   .g2 { grid-template-columns: 1fr; }
+  .steplist { grid-template-columns: 1fr; }
   .wire .panes { grid-template-columns: 1fr; }
   .login { grid-template-columns: 1fr; }
   .login .hero { padding: 32px 20px; flex-direction: row; gap: 14px; }
