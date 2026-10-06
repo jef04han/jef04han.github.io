@@ -576,45 +576,199 @@
       <div class="card"><div class="tabs">${tabs.map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-act="admin-tab" data-v="${k}">${l}</button>`).join('')}</div><div class="card-body">${body}</div></div>`);
   }
 
-  // ---------- process ----------
-  function viewProcess() {
-    const box = (x, y, w, h, t, sub, fill, stroke) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="1.4"/><text x="${x + w / 2}" y="${y + (sub ? h / 2 - 3 : h / 2 + 4)}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#182033">${t}</text>${sub ? `<text x="${x + w / 2}" y="${y + h / 2 + 13}" text-anchor="middle" font-size="10.5" fill="#5d6880">${sub}</text>` : ''}`;
-    const arr = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8a93a8" stroke-width="1.5" marker-end="url(#ah)"/>`;
-    const svg = `<svg viewBox="0 0 900 330" width="100%" role="img" aria-label="Architecture: channels push to the CKYC Hub, which calls the registry through the API gateway" style="min-width:640px">
-      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a93a8"/></marker></defs>
-      ${['DMS_CA', 'TAB_CA', 'CPH_SB', 'TAB_SB', 'VCIP'].map((c, k) => box(10, 20 + k * 60, 130, 44, c, 'account activated', '#f8f9fc', '#cfd6e3') + arr(140, 42 + k * 60, 220, 165)).join('')}
-      <rect x="225" y="10" width="360" height="310" rx="12" fill="#f4f7fe" stroke="#1d3f8f" stroke-dasharray="5 4"/>
-      <text x="240" y="32" font-size="13" font-weight="700" fill="#1d3f8f">CKYC Hub</text>
-      ${box(240, 45, 330, 46, 'Data Fetch API', 'validate · idempotent · store data + documents', '#fff', '#1d3f8f')}
-      ${box(240, 105, 160, 60, 'Create Requests', 'search → create → poll', '#e6f0fd', '#1d5fbf')}
-      ${box(410, 105, 160, 60, 'Update Requests', 'compare tags → update', '#efeafd', '#5b3cc4')}
-      ${box(240, 180, 330, 44, 'Consent module', 'OTP · physical form · face auth', '#fff', '#cfd6e3')}
-      ${box(240, 236, 160, 70, 'Operator console', 'roles · branch scoping', '#fff', '#cfd6e3')}
-      ${box(410, 236, 160, 70, 'Registry adapter', 'simulator | gateway', '#fff', '#cfd6e3')}
-      ${arr(570, 271, 640, 200)}
-      ${box(645, 140, 240, 84, 'Bank API gateway', 'JWE · RSA signature · mTLS', '#fff7dc', '#d98a00')}
-      ${arr(765, 224, 765, 244)}
-      ${box(645, 246, 240, 70, 'CKYC registry 2.0', 'search · create · update · download', '#e4f4ec', '#18794e')}
+  // ---------- How it works ----------
+  const C = { ink: '#182033', muted: '#5d6880', line: '#8a93a8', blue: '#1d5fbf', blueBg: '#e6f0fd', violet: '#5b3cc4', violetBg: '#efeafd', green: '#18794e', greenBg: '#e4f4ec', amber: '#b86e00', amberBg: '#fff3dc', grey: '#cfd6e3', greyBg: '#f8f9fc', navy: '#1d3f8f', navyBg: '#e8eefb' };
+  const sx = (s) => esc(s);
+  function sBox(x, y, w, h, title, lines = [], fill = '#fff', stroke = C.grey, opts = {}) {
+    const n = lines.length; const lh = 14;
+    const top = y + h / 2 - ((n ? n * lh : 0) + 16) / 2 + 12;
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${opts.dash ? ' stroke-dasharray="5 4"' : ''}/>
+      <text x="${x + w / 2}" y="${top}" text-anchor="middle" font-size="13.5" font-weight="700" fill="${C.ink}">${sx(title)}</text>
+      ${lines.map((l, k) => `<text x="${x + w / 2}" y="${top + 17 + k * lh}" text-anchor="middle" font-size="11.5" fill="${C.muted}">${sx(l)}</text>`).join('')}`;
+  }
+  function sDiamond(cx, cy, hw, hh, text, fill = C.amberBg, stroke = C.amber) {
+    return `<path d="M${cx} ${cy - hh} L${cx + hw} ${cy} L${cx} ${cy + hh} L${cx - hw} ${cy} Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+      <text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="13.5" font-weight="700" fill="${C.ink}">${sx(text)}</text>`;
+  }
+  const sArrow = (pts, opts = {}) => `<path d="M${pts.map((p) => p.join(' ')).join(' L')}" fill="none" stroke="${opts.color || C.line}" stroke-width="1.7"${opts.dash ? ' stroke-dasharray="5 4"' : ''} marker-end="url(#ah)"/>`;
+  const sLabel = (x, y, t, color = C.muted, anchor = 'middle') => `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="11.5" font-weight="600" fill="${color}" paint-order="stroke" stroke="#fff" stroke-width="4">${sx(t)}</text>`;
+  const svgOpen = (w, h, label) => `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="${sx(label)}" style="min-width:760px;font-family:Inter,system-ui,sans-serif">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${C.line}"/></marker></defs>`;
+
+  function individualFlowSvg() {
+    return svgOpen(1000, 810, 'Individual customer CKYC flow') + `
+      <text x="40" y="128" font-size="12" font-weight="700" fill="${C.violet}" letter-spacing=".06em">CKYC FLOW</text>
+      <text x="960" y="128" text-anchor="end" font-size="12" font-weight="700" fill="${C.blue}" letter-spacing=".06em">NON-CKYC FLOW</text>
+      ${sBox(330, 16, 340, 56, 'Account opening starts', ['any channel: DMS · TAB · CPH · VCIP'], C.navyBg, C.navy)}
+      ${sArrow([[500, 72], [500, 86]])}
+      ${sDiamond(500, 130, 160, 42, 'Customer has a CKYC ID?')}
+      ${sArrow([[340, 130], [180, 130], [180, 200]], { color: C.violet })}${sLabel(270, 122, 'Yes', C.violet)}
+      ${sArrow([[660, 130], [700, 130], [700, 200]], { color: C.blue })}${sLabel(690, 122, 'No', C.blue)}
+
+      ${sBox(40, 200, 280, 64, 'Capture CKYC ID', ['KYC record fetched via Hub', '(customer consent)'], C.violetBg, C.violet)}
+      ${sBox(560, 200, 280, 60, 'Hub Search API', ['PAN / Aadhaar / OVD → CKYC registry'], C.blueBg, C.blue)}
+      ${sArrow([[700, 260], [700, 290]])}
+      ${sDiamond(700, 330, 120, 40, 'Search result?')}
+      ${sArrow([[580, 330], [520, 330], [520, 420]])}${sArrow([[700, 370], [700, 420]])}${sArrow([[820, 330], [890, 330], [890, 420]])}
+      ${sBox(440, 420, 160, 62, '100% match', ['CKYC ID found'], C.greenBg, C.green)}
+      ${sBox(620, 420, 160, 62, 'Probable match', ['operator confirms', 'MATCH in Hub'], C.amberBg, C.amber)}
+      ${sBox(800, 420, 180, 62, 'No record found', ['new to CKYC'], '#fff', C.grey)}
+      ${sArrow([[520, 482], [520, 520]])}${sArrow([[700, 482], [700, 520]])}
+      ${sBox(440, 520, 340, 54, 'Use the existing CKYC ID', ['continue exactly as the CKYC flow'], C.greenBg, C.green)}
+      ${sArrow([[440, 547], [324, 547]], { color: C.violet })}
+
+      ${sArrow([[180, 264], [180, 520]], { color: C.violet })}
+      ${sBox(40, 520, 280, 54, 'Open account using CKYC ID', ['data pre-filled from registry'], C.violetBg, C.violet)}
+      ${sArrow([[890, 482], [890, 520]])}
+      ${sBox(800, 520, 180, 54, 'Open account as usual', ['full KYC in the channel'], '#fff', C.grey)}
+
+      ${sArrow([[180, 574], [180, 610]])}${sArrow([[890, 574], [890, 610]])}
+      ${sBox(40, 610, 940, 46, 'End of journey → channel calls the Hub Data Fetch API (one call: all data + documents)', [], C.navyBg, C.navy)}
+      ${sArrow([[260, 656], [260, 700]], { color: C.violet })}${sLabel(270, 684, 'CKYC ID present', C.violet, 'start')}
+      ${sArrow([[760, 656], [760, 700]], { color: C.blue })}${sLabel(770, 684, 'no CKYC ID', C.blue, 'start')}
+      ${sBox(40, 700, 440, 92, 'UPDATE bucket in Hub', ['Hub fetches the registry record, compares tag by tag', 'and sends only the changed data to CKYC.', 'Any later change is also updated from the portal.'], C.violetBg, C.violet)}
+      ${sBox(540, 700, 440, 92, 'CREATE bucket in Hub', ['Hub creates the CKYC record (search key, status,', 'match handling) → CKYC ID issued', '→ read back by channel / CBS'], C.blueBg, C.blue)}
+      ${sArrow([[540, 778], [484, 778]], { dash: true })}${sLabel(512, 770, 'later', C.muted)}
     </svg>`;
-    return layout('process', `<div class="pagehead"><div><h1>How it works</h1><p>Five channels, one integration. The Hub owns all CKYC logic, consent and audit.</p></div></div>
-      <div class="card card-pad table-wrap" style="margin-bottom:16px">${svg}</div>
-      <div class="grid g2">
-        <div class="card"><div class="card-head"><h2><span class="qtag create">CREATE</span> Create Request</h2></div><div class="card-body"><ol style="margin:0;padding-left:18px">
-          <li>Operator reviews data, documents and the readiness checklist.</li>
-          <li><b>Search</b> — the strongest available search (PAN/Aadhaar/OVD, else demographic; CIN/LLPIN/PAN for entities). searchKey stored.</li>
-          <li>Hit → link or download instead of creating a duplicate. No hit → <b>Create</b> with the searchKey; ackNo stored.</li>
-          <li><b>Poll</b>: APPROVED → CKYC no. · PROBABLE_MATCH → adjudicate each candidate · CONFIRMED_MATCH → consented download / link · REJECTED → fix at source.</li></ol></div></div>
-        <div class="card"><div class="card-head"><h2><span class="qtag update">UPDATE</span> Update Request</h2></div><div class="card-body"><ol style="margin:0;padding-left:18px">
-          <li><b>Fetch</b> the registry record (customer consent on first download).</li>
-          <li><b>Compare</b> every updatable tag: Same / Different / Not in registry / not returned.</li>
-          <li><b>Select</b> tags — differing ones pre-selected.</li>
-          <li><b>Update</b> with only those leaves + ckycNo; poll → CKYC_UPDATED. A later channel re-send re-opens it.</li></ol></div></div>
-        <div class="card"><div class="card-head"><h2>Customer consent</h2></div><div class="card-body small">
-          <p style="margin-top:0">Needed the first time the bank downloads a customer's record. Search, create and update are covered by the bank's attestation and the consent captured by the channel.</p>
-          <div class="kv"><div>OTP</div><div>OTP to registered mobile/email → operator enters it</div><div>Physical</div><div>Identity check + signed consent form (sent by channel or scanned)</div><div>Face auth</div><div>Identity check + live face capture with the desk camera</div></div></div></div>
-        <div class="card"><div class="card-head"><h2>Security &amp; audit</h2></div><div class="card-body small"><div class="kv">
-          <div>Channels</div><div>Per-channel API key, stored hashed; rotate / disable</div><div>Console</div><div>Roles Admin / Operator / Viewer / Branch (own DP code only)</div><div>Gateway</div><div>JWE A256KW / A128CBC-HS256, RSASHA256 signature, mTLS, IP whitelist</div><div>Privacy</div><div>Aadhaar last 4 only; auth factors masked; documents never logged</div><div>Audit</div><div>Timeline, decoded wire log, submissions, consent log per account</div></div></div></div>
-      </div>`);
+  }
+
+  function entityFlowSvg() {
+    return svgOpen(1000, 680, 'Non-individual customer CKYC flow') + `
+      ${sBox(320, 16, 360, 56, 'Non-individual account opening', ['Company · LLP · Partnership · Trust · Society'], C.navyBg, C.navy)}
+      ${sArrow([[500, 72], [500, 100]])}
+      ${sBox(320, 100, 360, 56, 'Identify every Authorised Signatory (AUS)', ['and related person: directors, partners, BOs'], '#fff', C.grey)}
+      ${sArrow([[500, 156], [500, 184]])}
+      <rect x="30" y="184" width="940" height="186" rx="12" fill="${C.greyBg}" stroke="${C.navy}" stroke-dasharray="6 5"/>
+      <text x="50" y="358" font-size="12" font-weight="700" fill="${C.navy}">STEP 1 — EVERY AUS GETS A CKYC ID FIRST (individual flow, one by one)</text>
+      ${sBox(50, 246, 200, 60, 'AUS has CKYC ID?', ['Yes → use it'], C.violetBg, C.violet)}
+      ${sArrow([[250, 276], [306, 276]], { color: C.blue })}${sLabel(278, 268, 'No', C.blue)}
+      ${sBox(310, 246, 190, 60, 'Hub Search API', ['for that AUS'], C.blueBg, C.blue)}
+      ${sArrow([[500, 276], [530, 276], [530, 241], [556, 241]])}${sArrow([[530, 276], [530, 313], [556, 313]])}
+      ${sBox(560, 214, 200, 54, 'Match / probable', ['use existing CKYC ID'], C.greenBg, C.green)}
+      ${sBox(560, 288, 200, 54, 'No record', ['Hub creates AUS CKYC ID'], C.blueBg, C.blue)}
+      ${sArrow([[760, 241], [780, 241], [780, 276], [796, 276]])}${sArrow([[760, 315], [780, 315], [780, 276]])}
+      ${sBox(800, 246, 150, 60, 'AUS CKYC ID', ['ready'], C.greenBg, C.green)}
+      ${sArrow([[150, 246], [150, 204], [875, 204], [875, 242]], { dash: true, color: C.violet })}${sLabel(500, 208, 'already has CKYC ID', C.violet)}
+
+      ${sArrow([[500, 370], [500, 392]])}
+      ${sDiamond(500, 434, 180, 42, 'All AUS have CKYC IDs?')}
+      ${sArrow([[680, 434], [776, 434]])}${sLabel(728, 426, 'No', C.amber)}
+      ${sBox(780, 404, 190, 60, 'Entity held in Hub', ['"waiting for AUS"'], C.amberBg, C.amber)}
+      ${sArrow([[875, 404], [875, 374]], { dash: true })}
+      ${sArrow([[500, 476], [500, 506]], { color: C.green })}${sLabel(512, 496, 'Yes', C.green, 'start')}
+      ${sBox(320, 506, 360, 56, 'Entity: Hub Search API', ['CIN / LLPIN / PAN / GSTIN'], C.blueBg, C.blue)}
+      ${sArrow([[320, 534], [250, 534], [250, 590]])}${sLabel(285, 526, 'found', C.muted)}
+      ${sArrow([[680, 534], [750, 534], [750, 590]])}${sLabel(715, 526, 'not found', C.muted)}
+      ${sBox(40, 590, 420, 76, 'Use existing entity CKYC ID → UPDATE bucket', ['open account with it; Hub updates changed tags,', 'AUS CKYC IDs as related persons'], C.violetBg, C.violet)}
+      ${sBox(540, 590, 420, 76, 'Create entity CKYC record → CREATE bucket', ['Hub creates it with the AUS CKYC IDs', 'linked as related persons → entity CKYC ID issued'], C.blueBg, C.blue)}
+    </svg>`;
+  }
+
+  function architectureSvg() {
+    const box = (x, y, w, h, t, sub, fill, stroke) => sBox(x, y, w, h, t, sub ? [sub] : [], fill, stroke);
+    return svgOpen(900, 330, 'Architecture: channels to CKYC Hub to API gateway to CKYC registry') + `
+      ${['DMS_CA', 'TAB_CA', 'CPH_SB', 'TAB_SB', 'VCIP'].map((c, k) => box(10, 20 + k * 60, 130, 44, c, 'account opening', C.greyBg, C.grey) + sArrow([[140, 42 + k * 60], [222, 165]])).join('')}
+      <rect x="225" y="10" width="360" height="310" rx="12" fill="#f4f7fe" stroke="${C.navy}" stroke-dasharray="5 4"/>
+      <text x="240" y="32" font-size="13" font-weight="700" fill="${C.navy}">CKYC Hub (central portal)</text>
+      ${box(240, 45, 330, 46, 'Search API + Data Fetch API', 'one integration per channel', '#fff', C.navy)}
+      ${box(240, 105, 160, 60, 'Create bucket', 'search → create → poll', C.blueBg, C.blue)}
+      ${box(410, 105, 160, 60, 'Update bucket', 'compare → update', C.violetBg, C.violet)}
+      ${box(240, 180, 330, 44, 'Consent module', 'OTP · physical form · face auth', '#fff', C.grey)}
+      ${box(240, 236, 160, 70, 'Branch portal', 'own branch queues', '#fff', C.grey)}
+      ${box(410, 236, 160, 70, 'Audit & MIS', 'one trail, one view', '#fff', C.grey)}
+      ${sArrow([[585, 165], [641, 182]])}
+      ${box(645, 140, 240, 84, 'Bank API gateway', 'JWE · signature · mTLS', C.amberBg, C.amber)}
+      ${sArrow([[765, 224], [765, 244]])}
+      ${box(645, 246, 240, 70, 'CKYC registry 2.0', 'search · create · update · download', C.greenBg, C.green)}
+    </svg>`;
+  }
+
+  function viewProcess() {
+    const rows = [
+      ['CKYC registry / gateway integrations to build', '5 — one inside every channel', '1 — in the Hub'],
+      ['Gateway credentials, certificates, IP whitelisting', '5 sets to obtain, renew and secure', '1 set'],
+      ['When CERSAI or the gateway changes', 'Change and re-test 5 applications', 'Change once in the Hub'],
+      ['Search, create, probable-match, consent logic', 'Built 5 times; can behave differently', 'Built once; same rules for every channel'],
+      ['Customer consent (OTP / form / face auth)', 'Each channel builds its own', 'Built once, reused by all'],
+      ['Customer data changes later', 'Each channel must track and push changes', 'Hub compares tag by tag and sends only changes'],
+      ['"Who is still without a CKYC ID?"', 'Scattered across 5 systems', 'One dashboard — by channel and by branch'],
+      ['Branch follow-up', 'No single work queue', 'Each branch logs in and sees its own pending list'],
+      ['Audit for regulator / inspection', '5 different logs and formats', 'One audit trail per account'],
+      ['Adding a new account-opening channel', 'A new CKYC integration project', 'Issue an API key — channel calls 2 Hub APIs'],
+    ];
+    const compare = `<div class="table-wrap"><table class="rows"><thead><tr><th>Area</th><th>Integrate CKYC in every channel</th><th>Central CKYC Hub</th></tr></thead><tbody>
+      ${rows.map(([a, b, c]) => `<tr><td class="lead" data-label="Area"><b>${a}</b></td><td data-label="Every channel"><span class="pill rejected plain">✕</span> ${b}</td><td data-label="Central Hub"><span class="pill done plain">✓</span> ${c}</td></tr>`).join('')}
+    </tbody></table></div>`;
+    const indSteps = [
+      ['CKYC flow', 'Customer gives a CKYC ID → KYC fetched through the Hub (with consent) → account opened using the CKYC ID → at the end of the journey the channel calls the Hub → the application lands in the <b>Update bucket</b>. Any change in customer data is updated to CKYC from the portal.'],
+      ['Non-CKYC flow — 100% match', 'Hub Search API finds the customer\'s record → continue as the CKYC flow with the existing CKYC ID → <b>Update bucket</b>.'],
+      ['Non-CKYC flow — probable match', 'Search returns look-alike records → operator confirms the right one (MATCH) → proceed with the existing CKYC ID and update it in the Hub → <b>Update bucket</b>. If none is the same person, it is treated as "no record".'],
+      ['Non-CKYC flow — no record found', 'Account is opened as usual → at the end of the journey the channel calls the Hub → <b>Create bucket</b> → Hub creates the CKYC record and the CKYC ID is read back to the channel / CBS.'],
+    ];
+    const entSteps = [
+      ['1. Identify all AUS', 'Every authorised signatory and related person (directors, partners, trustees, beneficial owners) is listed.'],
+      ['2. Every AUS gets a CKYC ID first', 'Each AUS goes through the individual flow: existing CKYC ID → use it; search match / probable match → use the existing ID; no record → Hub creates the AUS\'s CKYC ID.'],
+      ['3. Gate', 'The entity\'s CKYC record is <b>not</b> created until every AUS has a CKYC ID. Until then the Hub holds the entity as "waiting for AUS".'],
+      ['4. Entity search', 'Hub searches the entity by CIN / LLPIN / PAN / GSTIN.'],
+      ['5a. Entity found', 'Use the existing entity CKYC ID → <b>Update bucket</b>; AUS CKYC IDs updated as related persons.'],
+      ['5b. Entity not found', 'Hub creates the entity\'s CKYC record with the AUS CKYC IDs linked as related persons → <b>Create bucket</b> → entity CKYC ID issued.'],
+    ];
+    const stepList = (list) => `<div class="steplist">${list.map(([t, d]) => `<div class="sl"><b>${t}</b><p>${d}</p></div>`).join('')}</div>`;
+    return layout('process', `
+      <div class="pagehead"><div><h1>How it works</h1><p>One central CKYC portal for every account-opening channel — instead of building CKYC into each of them.</p></div>
+        <button class="btn noprint" data-act="print">Print / Save as PDF</button></div>
+      <nav class="jump noprint"><a href="#why" data-act="jump">Why a central hub</a><a href="#ind" data-act="jump">Individual flow</a><a href="#ent" data-act="jump">Non-individual flow</a><a href="#roles" data-act="jump">Channel vs Hub</a><a href="#arch" data-act="jump">Architecture</a></nav>
+
+      <section id="why" class="psec">
+        <div class="grid g3 pitch">
+          <div class="card card-pad"><div class="big">1</div><b>integration instead of 5</b><p class="small muted">The Hub alone talks to the CKYC registry through the API gateway.</p></div>
+          <div class="card card-pad"><div class="big">2</div><b>simple calls per channel</b><p class="small muted">Search during the journey, and one Data Fetch call at the end. No CKYC logic in channels.</p></div>
+          <div class="card card-pad"><div class="big">1</div><b>place to see and fix every CKYC case</b><p class="small muted">Create and Update buckets for the whole bank, with branch-wise queues.</p></div>
+        </div>
+        <div class="card" style="margin-top:16px"><div class="card-head"><h2>Integrating in every channel vs one central Hub</h2></div>${compare}</div>
+      </section>
+
+      <section id="ind" class="psec">
+        <div class="card"><div class="card-head"><h2>Individual customer — process flow</h2><span class="small muted">CKYC flow and non-CKYC flow</span></div>
+          <div class="card-body table-wrap diagram">${individualFlowSvg()}</div>
+          <div class="card-body" style="border-top:1px solid var(--border)">${stepList(indSteps)}</div></div>
+      </section>
+
+      <section id="ent" class="psec">
+        <div class="card"><div class="card-head"><h2>Non-individual customer — process flow</h2><span class="small muted">AUS first, then the entity</span></div>
+          <div class="card-body table-wrap diagram">${entityFlowSvg()}</div>
+          <div class="card-body" style="border-top:1px solid var(--border)">${stepList(entSteps)}</div></div>
+      </section>
+
+      <section id="roles" class="psec">
+        <div class="grid g2">
+          <div class="card"><div class="card-head"><h2>What each channel does</h2></div><div class="card-body"><ol class="olist">
+            <li>Ask the customer for a CKYC ID; if none, call the <b>Hub Search API</b>.</li>
+            <li>Open the account as per the result (with the CKYC ID, or as usual).</li>
+            <li>At the end of the journey, call the <b>Hub Data Fetch API</b> once — customer data, KYC attestation, consent and documents.</li>
+            <li>Read the CKYC ID back from the Hub status API into CBS.</li>
+            <li>Re-send when customer data changes later.</li></ol>
+            <p class="small muted" style="margin-bottom:0">That is all. No registry credentials, encryption, match handling or consent screens in the channel.</p></div></div>
+          <div class="card"><div class="card-head"><h2>What the Hub does</h2></div><div class="card-body"><ol class="olist">
+            <li>Talks to the CKYC registry through the bank's API gateway (encryption, signature, mTLS).</li>
+            <li>Places every account in the <b>Create</b> or <b>Update</b> bucket.</li>
+            <li>Create: de-dupe search, create, status polling, probable / confirmed match handling.</li>
+            <li>Update: fetches the registry record, compares tag by tag, sends only what changed.</li>
+            <li>Customer consent — OTP, physical form, face authentication — with a consent log.</li>
+            <li>Branch-wise queues, bank-wide MIS and one audit trail per account.</li></ol></div></div>
+        </div>
+      </section>
+
+      <section id="arch" class="psec">
+        <div class="card"><div class="card-head"><h2>Architecture</h2></div><div class="card-body table-wrap diagram">${architectureSvg()}</div></div>
+        <div class="grid g2" style="margin-top:16px">
+          <div class="card"><div class="card-head"><h2>Customer consent</h2></div><div class="card-body small">
+            <p style="margin-top:0">Needed the first time the bank downloads a customer's record. Search, create and update are covered by the bank's attestation and the consent captured by the channel.</p>
+            <div class="kv"><div>OTP</div><div>OTP to the registered mobile / email → operator enters it</div><div>Physical</div><div>Identity check + signed consent form</div><div>Face auth</div><div>Identity check + live face capture</div></div></div></div>
+          <div class="card"><div class="card-head"><h2>Security &amp; audit</h2></div><div class="card-body small"><div class="kv">
+            <div>Channels</div><div>Per-channel API key, stored hashed; rotate / disable</div><div>Portal</div><div>Roles: Admin and Branch (own branch only)</div><div>Gateway</div><div>JWE encryption, RSA signature, mTLS, IP whitelist</div><div>Privacy</div><div>Aadhaar last 4 only; probable-match data masked; documents never logged</div><div>Audit</div><div>Timeline, registry call log, submissions and consent log per account</div></div></div></div>
+        </div>
+      </section>`);
   }
 
   // ---------- consent modal ----------
@@ -736,6 +890,8 @@
     const a = curAccount();
     const U = user && user.username;
     switch (act) {
+      case 'jump': { ev.preventDefault(); const t = document.getElementById(el.getAttribute('href').slice(1)); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
+      case 'print': window.print(); break;
       case 'fill-login': document.getElementById('lu').value = el.dataset.u; document.getElementById('lp').value = el.dataset.p; document.getElementById('login-form').requestSubmit(); break;
       case 'logout': store.set('user', null); user = null; location.hash = '#/overview'; render(); break;
       case 'theme': store.set('theme', store.get('theme', 'default') === 'classic' ? 'default' : 'classic'); applyTheme(); break;
