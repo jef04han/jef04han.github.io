@@ -1,0 +1,10 @@
+{
+  "name": "DC Shift Runbook — Wave 2",
+  "short_name": "DC Shift",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f3d63",
+  "theme_color": "#0f3d63",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
