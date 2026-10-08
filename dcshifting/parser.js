@@ -4,6 +4,13 @@
 (function (root) {
   'use strict';
 
+  var DEVICE_STAGES = ['Shut down', 'Handed to Royal', 'In transit', 'Received at STT', 'Racked & cabled', 'Powered on', 'Validated'];
+  function isNA(v) { return !v || /^(na|n\/a|not applicable|no ip assigned|-)$/i.test(String(v).trim()); }
+  // Stable device identity across runbook versions (shared by the app and the exporter).
+  function deviceKey(serial, host, sn) { return !isNA(serial) ? serial + '|' + host : 'sn:' + sn; }
+  var STATUS_IN = { 'open': 'Open', 'in progress': 'In Progress', 'wip': 'In Progress', 'closed': 'Done', 'done': 'Done', 'complete': 'Done', 'completed': 'Done',
+    'blocked': 'Blocked', 'not applicable': 'N/A', 'n/a': 'N/A', 'na': 'N/A' };
+
   function norm(s) { return String(s == null ? '' : s).toLowerCase().replace(/\\n/g, ' ').replace(/[^a-z0-9#&/]+/g, ' ').trim(); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
@@ -71,7 +78,24 @@
     function get(o, name) { return val(o[norm(name)]); }
     function cell(o, name) { return o[norm(name)]; }
 
-    return { val: val, grid: grid, findHeader: findHeader, rows: rows, get: get, cell: cell, isDateCell: isDateCell, dateParts: dateParts };
+    // Date cell or "YYYY-MM-DD HH:MM" text → ISO timestamp (local time), else ''.
+    function iso(c) {
+      var y, mo, d, H = 0, M = 0;
+      if (isDateCell(c) && c.v >= 1) {
+        // round to the nearest minute: Excel's fractional days drift by fractions of a second
+        var days = Math.floor(c.v), mins = Math.round((c.v - days) * 1440);
+        if (mins >= 1440) { days++; mins -= 1440; }
+        var p = dateParts(days); y = p.y; mo = p.m; d = p.d; H = Math.floor(mins / 60); M = mins % 60;
+      }
+      else {
+        var m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/.exec(val(c));
+        if (!m) return '';
+        y = +m[1]; mo = +m[2]; d = +m[3]; H = +(m[4] || 0); M = +(m[5] || 0);
+      }
+      return new Date(y, mo - 1, d, H, M).toISOString();
+    }
+
+    return { iso: iso, val: val, grid: grid, findHeader: findHeader, rows: rows, get: get, cell: cell, isDateCell: isDateCell, dateParts: dateParts };
   }
 
   function findSheet(wb, patterns) {
@@ -102,7 +126,7 @@
       var d = X.dateParts(dc.v);
       if (!d) return '';
       var H, M;
-      if (tc && tc.t === 'n') { var t = X.dateParts(tc.v % 1); H = t.H; M = t.M; }
+      if (tc && tc.t === 'n') { var mins = Math.round((tc.v % 1) * 1440) % 1440; H = Math.floor(mins / 60); M = mins % 60; }
       else {
         var m = /^(\d{1,2}):(\d{2})/.exec(val(tc));
         if (!m) return '';
@@ -121,7 +145,8 @@
         dur: parseInt(get(r, 'Planned Duration (Minutes)'), 10) || 0,
         start: startOf(X.cell(r, 'Planned Start Date'), X.cell(r, 'Planned Start Time')),
         endSheet: (get(r, 'Planned End Date').slice(0, 10) + ' ' + get(r, 'Planned End Time')).trim(),
-        status: get(r, 'Status') || 'Open', deps: get(r, 'Dependencies'), comments: get(r, 'Comments'),
+        status: STATUS_IN[get(r, 'Status').toLowerCase()] || get(r, 'Status') || 'Open',
+        aStart: X.iso(X.cell(r, 'Actual Start Date/Time')), aEnd: X.iso(X.cell(r, 'Actual End Date/Time')), note: get(r, 'App Notes'), deps: get(r, 'Dependencies'), comments: get(r, 'Comments'),
         appGroup: get(r, 'App Owner Group'), app: get(r, 'Application Name'),
         spoc: get(r, 'Application SPOC Name'), spocContact: get(r, 'Application Scope Contact'),
         vendor: get(r, 'Application Vendor Name'), vendorContact: get(r, 'Application Vendor Contact')
@@ -188,30 +213,41 @@
       'Application SPOC Name', 'Application Scope Contact', 'Application Vendor Name', 'Application Vendor Contact'];
     var keys = ['sn', 'host', 'batch', 'truck', 'shutDate', 'shutTime', 'handover', 'truckTime', 'hyp', 'physHost', 'serial', 'subSerial', 'hw', 'cbs',
       'hall', 'srcRack', 'srcU', 'uSize', 'dstRack', 'dstU', 'type1', 'type', 'oem', 'model', 'role', 'env', 'crit', 'appGroup', 'app', 'ip', 'san',
-      'mgmtIp', 'os', 'osVer', 'psu', 'cord', 'spoc', 'spocContact', 'vendor', 'vendorContact'];
+      'mgmtIp', 'os', 'osVer', 'psu', 'cord', 'spoc', 'spocContact', 'vendor', 'vendorContact', 'stage', 'stageAt', 'note'];
     var devices = [];
     X.rows(rg, rhr).forEach(function (r) {
       if (!get(r, 'Hostname')) return;
       var sr = scope[get(r, 'Hostname') + '|' + get(r, 'Device Primary Serial Numbers')] || {};
       var vals = rpCols.map(function (c) { return get(r, c); }).concat(scCols.map(function (c) { return get(sr, c); }));
+      var stage = DEVICE_STAGES.map(function (s) { return s.toLowerCase(); }).indexOf(get(r, 'Migration Stage').toLowerCase());
+      vals.push(stage, stage >= 0 ? X.iso(X.cell(r, 'Stage Updated')) : '', get(r, 'App Notes'));
       vals[4] = vals[4].slice(0, 10);
       devices.push(vals);
     });
     if (!devices.length) throw new Error('No devices found in Run_Plan.');
 
     /* ---- GO / NO-GO ---- */
-    var gonogo = [];
+    var gonogo = [], decision = '';
     var gWs = findSheet(wb, [/go\s*-?\s*no\s*-?\s*go/i]);
     if (gWs) {
       var gg = X.grid(gWs), ghr = X.findHeader(gg, ['Sr. No.', 'Activities']);
       if (ghr >= 0) {
         var sc = (gg[ghr] || []).map(function (c) { return norm(val(c)); }).indexOf(norm('Sr. No.'));
+        var hdr = (gg[ghr] || []).map(function (c) { return norm(val(c)); });
+        var cSign = hdr.indexOf(norm('SignOff Received')), cDec = hdr.indexOf(norm('GO/NOGO'));
         var section = 'Readiness';
         for (var gr = ghr + 1; gr < gg.length; gr++) {
           var g = gg[gr] || [];
           var label = val(g[sc]);
           if (/must\s*have/i.test(label)) { section = 'GO – Must Haves'; continue; }
-          if (/^\d+$/.test(label)) gonogo.push({ section: section, n: label, item: val(g[sc + 1]), by: val(g[sc + 3]), who: val(g[sc + 4]) });
+          if (/^\d+$/.test(label)) {
+            var sv = cSign >= 0 ? val(g[cSign]) : '', sm = /(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2})/.exec(sv);
+            gonogo.push({ section: section, n: label, item: val(g[sc + 1]), by: val(g[sc + 3]), who: val(g[sc + 4]),
+              signed: !!sv && !/^no\b/i.test(sv), signedAt: sm ? X.iso({ v: sm[1], t: 's' }) : '' });
+          } else if (cDec >= 0 && g.some(function (c) { return /^decision$/i.test(val(c)); })) {
+            var dv = val(g[cDec]).toUpperCase().replace(/[^A-Z]/g, '');
+            if (dv === 'GO' || dv === 'NOGO') decision = dv;
+          }
         }
       }
     }
@@ -224,7 +260,7 @@
       if (phr >= 0) X.rows(pg, phr).forEach(function (r) {
         if (!get(r, '#')) return;
         pre.push({ id: get(r, '#'), phase: get(r, 'Phase'), loc: get(r, 'Location'), scope: get(r, 'Scope / Application'),
-          desc: get(r, 'Description'), owner: get(r, 'Owner'), status: get(r, 'Status') || 'Open', freq: get(r, 'Frequency') });
+          desc: get(r, 'Description'), owner: get(r, 'Owner'), status: get(r, 'Status') || 'Open', at: X.iso(X.cell(r, 'Actual Date')), freq: get(r, 'Frequency') });
       });
     }
 
@@ -275,16 +311,31 @@
       }
     }
 
+    /* ---- App event log (written by a previous export) ---- */
+    var log = [];
+    var lWs = findSheet(wb, [/^app event log$/i]);
+    if (lWs) {
+      var lg = X.grid(lWs);
+      for (var li = 1; li < lg.length; li++) {
+        var lrow = lg[li] || [];
+        var when = X.iso(lrow[0]);
+        if (when && val(lrow[1])) log.unshift({ t: when, m: val(lrow[1]), by: val(lrow[2]) });
+      }
+    }
+
     var wave = /wave\s*0*(\d+)/i.exec(title + ' ' + fileName);
     var ver = /v\d+(\.\d+)*/i.exec(fileName || '');
     return {
       title: title || 'DC Migration Runbook', short: 'DC Shift' + (wave ? ' · Wave ' + wave[1] : ''),
       version: ver ? ver[0] : '', source: fileName || '',
       tasks: tasks, summary: summary, trucks: trucks, devKeys: keys, devices: devices,
-      gonogo: gonogo, pre: pre, contacts: contacts, comms: comms, changelog: changelog, warnings: warnings
+      gonogo: gonogo, decision: decision, log: log, pre: pre, contacts: contacts, comms: comms, changelog: changelog, warnings: warnings
     };
   }
 
   root.parseRunbook = parseRunbook;
-  if (typeof module !== 'undefined') module.exports = { parseRunbook: parseRunbook };
+  root.runbookReader = makeReader;
+  root.deviceKey = deviceKey;
+  root.DEVICE_STAGES = DEVICE_STAGES;
+  if (typeof module !== 'undefined') module.exports = { parseRunbook: parseRunbook, runbookReader: makeReader, deviceKey: deviceKey, DEVICE_STAGES: DEVICE_STAGES };
 })(typeof window !== 'undefined' ? window : globalThis);
