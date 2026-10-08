@@ -4,11 +4,12 @@ window.startRunbookApp = function (R, meta) {
 
   var KEY = 'dcshifting.progress.v1';
   var STATUSES = ['Open', 'In Progress', 'Done', 'Blocked', 'N/A'];
-  var STAGES = ['Shut down', 'Handed to Royal', 'In transit', 'Received at STT', 'Racked & cabled', 'Powered on', 'Validated'];
+  var STAGES = window.DEVICE_STAGES;
+  var ROUTE_KEY = 'dcshifting.lastRoute';
   var PAGE = 60;
 
   /* ---------------- state ---------------- */
-  function defaults() { return { tasks: {}, dev: {}, go: {}, pre: {}, decision: '', log: [], who: '' }; }
+  function defaults() { return { tasks: {}, dev: {}, go: {}, pre: {}, preAt: {}, decision: '', log: [], who: '' }; }
   var S = (function () {
     try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY) || '{}')); }
     catch (e) { return defaults(); }
@@ -33,7 +34,7 @@ window.startRunbookApp = function (R, meta) {
   var devices = R.devices.map(function (row, i) {
     var o = { idx: i };
     R.devKeys.forEach(function (k, j) { o[k] = row[j]; });
-    o.key = !isNA(o.serial) ? o.serial + '|' + o.host : 'sn:' + o.sn;
+    o.key = window.deviceKey(o.serial, o.host, o.sn);
     o.name = isNA(o.host) ? (o.model || o.type || 'Device') : o.host;
     o.hay = [o.host, o.serial, o.subSerial, o.ip, o.mgmtIp, o.srcRack, o.srcU, o.dstRack, o.model, o.type, o.app, o.appGroup, o.physHost, o.truck]
       .join(' ').toLowerCase();
@@ -41,6 +42,34 @@ window.startRunbookApp = function (R, meta) {
   });
   var devBySn = {};
   devices.forEach(function (d) { if (devBySn[d.key]) d.key += '#' + d.idx; devBySn[d.key] = d; });
+  // Progress carried inside the uploaded workbook (from an earlier export) fills in anything
+  // this device hasn't recorded yet; what was recorded here always wins.
+  (function seedFromWorkbook() {
+    var n = 0, nowIso = new Date().toISOString();
+    tasks.forEach(function (t) {
+      if (S.tasks[t.id] || (t.status === 'Open' && !t.aStart && !t.aEnd && !t.note)) return;
+      var o = { status: t.status };
+      if (t.aStart) o.aStart = t.aStart;
+      if (t.aEnd) o.aEnd = t.aEnd;
+      if (t.note) o.note = t.note;
+      S.tasks[t.id] = o; n++;
+    });
+    devices.forEach(function (d) {
+      if (S.dev[d.key] || ((d.stage == null || d.stage < 0) && !d.note)) return;
+      var st = d.stage >= 0 ? d.stage : -1, ts = {};
+      for (var i = 0; i <= st; i++) ts[i] = d.stageAt || nowIso;
+      S.dev[d.key] = { stage: st, ts: ts };
+      if (d.note) S.dev[d.key].note = d.note;
+      n++;
+    });
+    R.gonogo.forEach(function (g, i) { if (g.signed && !S.go[i]) { S.go[i] = { signed: true, at: g.signedAt || nowIso }; n++; } });
+    if (!S.decision && R.decision) { S.decision = R.decision; n++; }
+    S.preAt = S.preAt || {};
+    R.pre.forEach(function (p) { if (p.at && !S.preAt[p.id]) { S.preAt[p.id] = p.at; n++; } });
+    if (!S.log.length && R.log && R.log.length) { S.log = R.log.slice(); n++; }
+    if (n) save();
+  })();
+
   var batches = [];
   devices.forEach(function (d) { if (batches.indexOf(d.batch) < 0) batches.push(d.batch); });
   batches.sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
@@ -154,6 +183,7 @@ window.startRunbookApp = function (R, meta) {
   var ui = { gate: 'All', status: 'All', q: '', sort: 'batch', dBatch: 'All', dStage: 'All', dq: '', dLimit: PAGE };
 
   function route() {
+    try { localStorage.setItem(ROUTE_KEY, location.hash || '#home'); } catch (e) { /* ignore */ }
     var h = (location.hash || '#home').slice(1).split('/');
     var tab = h[0] || 'home';
     $$('#tabbar a').forEach(function (a) { a.classList.toggle('on', a.dataset.tab === tab); });
@@ -223,7 +253,8 @@ window.startRunbookApp = function (R, meta) {
         '<div style="margin-top:6px">' + bar(gc) + '</div></div><span class="chev">' + ICON.chev + '</span></div>';
     }).join('') + '</div>';
 
-    h += '<div style="margin-top:16px"><button class="btn block" data-act="share">Share status update</button></div>';
+    h += '<div class="btn-grid" style="margin-top:16px"><button class="btn primary" data-act="xlsx">Export Excel</button><button class="btn" data-act="share">Share status</button></div>' +
+      (S.exportedAt ? '<p class="small muted" style="text-align:center">Last Excel export ' + fDT(new Date(S.exportedAt)) + '</p>' : '');
     view.innerHTML = h;
   }
   function stat(v, l) { return '<div class="stat"><b>' + v + '</b><span>' + l + '</span></div>'; }
@@ -516,7 +547,7 @@ window.startRunbookApp = function (R, meta) {
       ['contacts', 'Contacts', 'Migration squad, management, app SPOCs & vendors'],
       ['comms', 'Command centre', 'Bridge, checkpoints & communication plan'],
       ['log', 'Event log', S.log.length + ' entries'],
-      ['runbook', 'Runbook file', (R.source || 'Uploaded runbook') + (meta && meta.at ? ' · loaded ' + fDT(new Date(meta.at)) : '')],
+      ['runbook', 'Runbook file & Excel export', (R.source || 'Uploaded runbook') + (meta && meta.at ? ' · loaded ' + fDT(new Date(meta.at)) : '')],
       ['changes', 'Runbook change log', R.version + ' · ' + R.changelog.length + ' change(s)'],
       ['data', 'Your name, export & backup', S.who ? 'Name: ' + S.who : 'Progress is saved on this device']
     ];
@@ -622,6 +653,9 @@ window.startRunbookApp = function (R, meta) {
       '<span class="tag">' + R.trucks.length + ' trucks</span><span class="tag">' + R.contacts.length + ' contacts</span><span class="tag">' + R.pre.length + ' checklist items</span></div>' +
       (w.length ? '<div class="section-t">Warnings</div>' + w.map(function (x) { return '<div class="small" style="color:var(--warn)">• ' + esc(x) + '</div>'; }).join('') : '') +
       '</div>' +
+      '<h2>Export</h2><div class="card"><p class="small muted" style="margin-top:0">Download the runbook with your progress written into it: task Status and Actual Start/End, device Migration Stage, checklist sign-offs, the GO/NO-GO decision, notes and an “App Event Log” sheet. Formatting and formulas are kept.</p>' +
+      '<button class="btn primary block" data-act="xlsx">Export updated Excel</button>' +
+      (S.exportedAt ? '<div class="small muted" style="margin-top:6px">Last exported ' + fDT(new Date(S.exportedAt)) + '</div>' : '') + '</div>' +
       '<h2>Update</h2><div class="card"><p class="small muted" style="margin-top:0">Upload a newer version with the same format. Task and device progress is kept — tasks are matched by Task ID and devices by serial number + hostname.</p>' +
       '<label class="btn primary block">Upload new runbook version<input type="file" id="reupload" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div>' +
       '<h2>Remove</h2><div class="card"><p class="small muted" style="margin-top:0">Deletes the runbook data stored in this browser. Progress is kept unless you also clear it under “Your name, export & backup”.</p>' +
@@ -630,6 +664,7 @@ window.startRunbookApp = function (R, meta) {
   function moreData() {
     return '<h2>Your name</h2><div class="card"><input type="text" id="who" placeholder="Shown on log entries" value="' + esc(S.who) + '"></div>' +
       '<h2>Share & export</h2><div class="card"><p class="small muted" style="margin-top:0">Progress is stored only in this browser. Use backup / restore to move it to another phone, or share a status update with the bridge.</p>' +
+      '<button class="btn primary block" data-act="xlsx" style="margin-bottom:8px">Export updated Excel</button>' +
       '<div class="btn-grid"><button class="btn" data-act="share">Share status</button><button class="btn" data-act="csv">Tasks CSV</button>' +
       '<button class="btn" data-act="backup">Backup (JSON)</button><label class="btn">Restore<input type="file" id="restore" accept="application/json,.json" hidden></label></div></div>' +
       '<h2>Reset</h2><div class="card"><button class="btn bad block" data-act="reset">Clear all progress on this device</button></div>';
@@ -715,6 +750,50 @@ window.startRunbookApp = function (R, meta) {
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
   }
   function stamp() { var n = now(); return n.getFullYear() + pad(n.getMonth() + 1) + pad(n.getDate()) + '-' + pad(n.getHours()) + pad(n.getMinutes()); }
+
+  /* ---------------- Excel export ---------------- */
+  var exporting = false;
+  function exportExcel() {
+    if (exporting) return;
+    exporting = true;
+    toast('Building Excel…');
+    setTimeout(function () {
+      window.exportUpdatedExcel(R, S).then(function (res) {
+        exporting = false;
+        S.exportedAt = new Date().toISOString();
+        log('Exported ' + res.name);
+        save();
+        showExport(res);
+      }, function (err) {
+        exporting = false;
+        if (err && err.needOriginal) return askOriginal();
+        toast((err && err.message) || 'Export failed');
+      });
+    }, 30);
+  }
+  function showExport(res) {
+    $('#toast').hidden = true;
+    var url = URL.createObjectURL(res.blob);
+    var file = typeof File !== 'undefined' ? new File([res.blob], res.name, { type: res.blob.type }) : null;
+    var canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+    openSheet('<h3>Excel ready</h3><p class="small muted" style="margin-top:2px">' + esc(res.name) + '</p>' +
+      '<div class="card small" style="background:var(--chip);border:0">' + res.summary.map(esc).join(' · ') + '</div>' +
+      '<div class="btn-grid"><a class="btn primary" href="' + url + '" download="' + esc(res.name) + '">Download</a>' +
+      (canShare ? '<button class="btn" id="shareXlsx">Share…</button>' : '<span></span>') + '</div>' +
+      '<p class="small muted">Re-uploading this file later (here or on another phone) brings the progress back.</p>', function () {
+      var b = $('#shareXlsx');
+      if (b) b.addEventListener('click', function () { navigator.share({ files: [file], title: res.name }).catch(function () {}); });
+    });
+  }
+  function askOriginal() {
+    openSheet('<h3>Original runbook needed</h3><p class="small muted">This device has the runbook data but not the original Excel file (it was loaded with an older version of the app). Pick the same runbook .xlsx once — your progress is kept — and the export will continue.</p>' +
+      '<label class="btn primary block">Choose runbook file<input type="file" id="origFile" accept=".xlsx,.xlsm" hidden></label>', function () {
+      $('#origFile').addEventListener('change', function (e) {
+        var f = e.target.files[0]; if (!f) return;
+        window.attachOriginalFile(f, R).then(function () { closeSheet(); exportExcel(); }, function (err) { toast(err.message || 'Could not use that file'); });
+      });
+    });
+  }
 
   /* ---------------- global search ---------------- */
   function openSearch() {
@@ -826,14 +905,17 @@ window.startRunbookApp = function (R, meta) {
     if (ds.pretoggle) {
       var p = R.pre.filter(function (x) { return x.id === ds.pretoggle; })[0];
       S.pre[p.id] = preStatus(p) === 'Closed' ? 'Open' : 'Closed';
+      S.preAt = S.preAt || {};
+      if (S.pre[p.id] === 'Closed') S.preAt[p.id] = new Date().toISOString(); else delete S.preAt[p.id];
       log('Pre-event ' + p.id + ' → ' + S.pre[p.id]); save(); return rerender();
     }
     switch (ds.act) {
+      case 'xlsx': return exportExcel();
       case 'share': return shareText(statusText(), 'DC Shift status');
       case 'csv': return download('dcshift-tasks-' + stamp() + '.csv', tasksCSV(), 'text/csv');
       case 'backup': return download('dcshift-backup-' + stamp() + '.json', JSON.stringify(S, null, 1), 'application/json');
       case 'unload':
-        if (confirm('Remove the runbook data from this device? You will need to upload it again.')) { window.forgetRunbook(); location.hash = ''; location.reload(); }
+        if (confirm('Remove the runbook data from this device? You will need to upload it again.')) { window.forgetRunbook().then(function () { history.replaceState(null, '', location.pathname); try { localStorage.removeItem(ROUTE_KEY); } catch (e) { /* ignore */ } location.reload(); }); }
         return;
       case 'reset':
         if (confirm('Clear all task, device and checklist progress on this device?')) { var who = S.who; S = defaults(); S.who = who; save(); toast('Progress cleared'); rerender(); }
@@ -867,6 +949,11 @@ window.startRunbookApp = function (R, meta) {
   function measure() { document.documentElement.style.setProperty('--topbar-h', $('.topbar').offsetHeight + 'px'); }
   measure(); window.addEventListener('resize', measure);
 
+  if (!location.hash) {
+    var last = null;
+    try { last = localStorage.getItem(ROUTE_KEY); } catch (e) { /* ignore */ }
+    if (last && last !== '#home') history.replaceState(null, '', last);
+  }
   route();
 
 };
