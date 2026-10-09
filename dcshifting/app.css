@@ -247,3 +247,12 @@ pre.note { white-space: pre-wrap; font: inherit; margin: 0; }
 .privacy { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; }
 .privacy svg { flex: none; color: var(--done); margin-top: 1px; }
 .privacy + .privacy { margin-top: 10px; }
+
+/* device stage summary */
+.dev-sum { margin: 0 2px 8px; }
+.dev-sum .row { gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.chip .cnt { margin-left: 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.chip.zero { opacity: .5; }
+.stage-col { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; max-width: 42%; }
+.stage-col small { font-size: 11.5px; color: var(--muted); text-align: right; }
+.stage-col small.ok { color: var(--done); font-weight: 600; }
