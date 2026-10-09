@@ -417,30 +417,35 @@
   function renderDevices(arg, keep) {
     if (!keep) { ui.dLimit = PAGE; if (arg && batches.indexOf(arg) >= 0) ui.dBatch = arg; }
     var q = ui.dq.toLowerCase().trim();
-    var list = devices.filter(function (d) {
+    var base = devices.filter(function (d) {
       if (ui.dBatch !== 'All' && d.batch !== ui.dBatch) return false;
-      if (ui.dStage !== 'All') {
-        var s = dStage(d);
-        if (ui.dStage === 'Not started' && s !== -1) return false;
-        if (ui.dStage === 'In flight' && (s < 0 || s === STAGES.length - 1)) return false;
-        if (ui.dStage === 'Validated' && s !== STAGES.length - 1) return false;
-      }
       return !q || d.hay.indexOf(q) >= 0;
     });
+    // devices per stage (-1 = not started) within the chosen batch / search
+    var cnt = {};
+    base.forEach(function (d) { var s = dStage(d); cnt[s] = (cnt[s] || 0) + 1; });
+    if (ui.dStage !== 'All' && !/^-?\d+$/.test(ui.dStage)) ui.dStage = 'All';
+    var list = ui.dStage === 'All' ? base : base.filter(function (d) { return String(dStage(d)) === ui.dStage; });
+    var last = STAGES.length - 1, notStarted = cnt[-1] || 0, validated = cnt[last] || 0;
+    var inFlight = base.length - notStarted - validated;
+    var opts = [['All', 'All', base.length], ['-1', 'Not started', notStarted]].concat(STAGES.map(function (s, i) { return [String(i), s, cnt[i] || 0]; }));
     var h = '<div class="sticky-tools"><input class="search" type="search" id="dq" placeholder="Hostname, serial, IP, rack, app…" value="' + esc(ui.dq) + '">' +
       '<div class="chips">' + ['All'].concat(batches).map(function (b) {
         return '<button class="chip' + (ui.dBatch === b ? ' on' : '') + '" data-dbatch="' + esc(b) + '">' + (b === 'All' ? 'All batches' : 'B' + esc(b)) + '</button>';
       }).join('') + '</div>' +
-      '<div class="chips">' + ['All', 'Not started', 'In flight', 'Validated'].map(function (s) {
-        return '<button class="chip' + (ui.dStage === s ? ' on' : '') + '" data-dstage="' + s + '">' + s + '</button>';
-      }).join('') + '<span class="chip" style="border:0;background:transparent" aria-live="polite">' + list.length + ' devices</span></div></div>';
+      '<div class="dev-sum" aria-live="polite"><div class="row small"><b>' + base.length + ' devices</b><span class="muted">· ' + notStarted + ' not started · ' + inFlight + ' in flight · ' +
+      '<span style="color:var(--done)">' + validated + ' validated</span></span></div>' +
+      bar({ total: base.length, closed: validated, 'In Progress': inFlight, Blocked: 0 }) + '</div>' +
+      '<div class="chips">' + opts.map(function (o) {
+        return '<button class="chip' + (ui.dStage === o[0] ? ' on' : '') + (o[2] ? '' : ' zero') + '" data-dstage="' + o[0] + '">' + esc(o[1]) + '<b class="cnt">' + o[2] + '</b></button>';
+      }).join('') + '</div></div>';
     if (!list.length) h += '<div class="empty">No devices match.</div>';
     else {
       h += '<div class="list">' + list.slice(0, ui.dLimit).map(function (d) {
         return '<div class="li" data-dev="' + esc(d.sn) + '"><div class="grow"><div class="title">' + esc(d.name) + '</div>' +
           '<div class="sub">B' + esc(d.batch) + ' · ' + esc(d.type || d.type1) + ' · ' + esc(d.serial) + '</div>' +
           '<div class="sub">' + esc(d.srcU || d.srcRack) + ' → ' + esc(d.dstRack) + (d.dstU ? ' U' + esc(d.dstU) : '') + (isNA(d.ip) ? '' : ' · ' + esc(d.ip)) + '</div></div>' +
-          stageDots(d) + '</div>';
+          '<div class="stage-col">' + stageDots(d) + '<small' + (dStage(d) === last ? ' class="ok"' : '') + '>' + esc(dStage(d) < 0 ? 'Not started' : STAGES[dStage(d)]) + '</small></div></div>';
       }).join('') + '</div>';
       if (list.length > ui.dLimit) h += '<button class="btn more-btn" data-dmore="1">Show more (' + (list.length - ui.dLimit) + ' left)</button>';
     }

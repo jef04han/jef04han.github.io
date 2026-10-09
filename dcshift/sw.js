@@ -1,5 +1,5 @@
 /* Network-first cache so the runbook still opens with poor signal inside the DC. */
-var CACHE = 'dcshift-v1';
+var CACHE = 'dcshift-v2';
 var FILES = ['./', 'index.html', 'app.css', 'app.js', 'data.js', 'manifest.json', 'icon.svg'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
