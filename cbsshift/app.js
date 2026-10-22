@@ -610,9 +610,13 @@ window.startRunbookApp = function (R, meta) {
   var CKEY = 'cbsshift.cables';
   var CU_OPTS = [0, 1, 2, 3, 4, 5, 6, 8], FC_OPTS = [0, 1, 2, 3, 4, 6, 8];
   var cs = (function () {
-    var d = { by: 'src', val: '', idx: 0, pending: true, auto: true };
-    try { return Object.assign(d, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) { return d; }
+    var d = { by: 'src', val: '', idx: 0, pending: true, auto: true, view: '' };
+    try { d = Object.assign(d, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) { /* ignore */ }
+    if (!d.view) d.view = window.matchMedia && matchMedia('(min-width: 800px)').matches ? 'table' : 'card';
+    return d;
   })();
+  // laptops / desktops: put the cursor in the next box so counts can be typed straight away
+  var FINE = !!(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches);
   function saveCs() { try { localStorage.setItem(CKEY, JSON.stringify(cs)); } catch (e) { /* ignore */ } }
   function cabScopes(by) {
     var f = by === 'dst' ? 'dstRack' : by === 'truck' ? 'truck' : 'srcRack', m = {};
@@ -649,11 +653,13 @@ window.startRunbookApp = function (R, meta) {
       var ds = scopes[n], k = ds.filter(cabDone).length;
       return '<option value="' + esc(n) + '"' + (n === cs.val ? ' selected' : '') + '>' + esc(n) + ' — ' + k + '/' + ds.length + (k === ds.length ? ' ✓' : '') + '</option>';
     }).join('') + '</select>';
-    h += '<div class="row small" style="margin:2px 2px 6px"><b>' + done + ' / ' + list.length + ' done</b><span class="spacer"></span>' +
-      '<button class="chip' + (cs.pending ? ' on' : '') + '" data-ctog="pending">Skip done</button>' +
-      '<button class="chip' + (cs.auto ? ' on' : '') + '" data-ctog="auto">Auto-next</button></div>' +
-      bar({ total: list.length, closed: done, 'In Progress': 0, Blocked: 0 });
+    h += '<div class="row small wrap" style="margin:2px 2px 6px"><b id="cab-prog">' + done + ' / ' + list.length + ' done</b><span class="spacer"></span>' +
+      '<span class="seg mini-seg"><button class="' + (cs.view === 'table' ? 'on' : '') + '" data-cview="table">Table</button><button class="' + (cs.view !== 'table' ? 'on' : '') + '" data-cview="card">One by one</button></span>' +
+      (cs.view === 'table' ? '' : '<button class="chip' + (cs.pending ? ' on' : '') + '" data-ctog="pending">Skip done</button>' +
+      '<button class="chip' + (cs.auto ? ' on' : '') + '" data-ctog="auto">Auto-next</button>') + '</div>' +
+      '<div id="cab-bar">' + bar({ total: list.length, closed: done, 'In Progress': 0, Blocked: 0 }) + '</div>';
     if (!list.length) { view.innerHTML = h + '<div class="empty">No physical devices here.</div>'; bindCabSel(); return; }
+    if (cs.view === 'table') { view.innerHTML = h + cabTable(list); bindCabSel(); focusTable(list); return; }
     var d = list[cs.idx], uf = cs.by === 'dst' ? 'dstU' : 'srcU', cu = dCab(d, 'cu'), fc = dCab(d, 'fc');
     h += '<div class="cab-card' + (cabDone(d) ? ' done' : '') + '">' +
       '<div class="row"><span class="u-badge">' + (cs.by === 'dst' ? esc(d.dstRack) : esc(d.srcRack)) + (d[uf] && !isNA(d[uf]) ? ' · ' + esc(uFmt(d[uf])) : '') + '</span>' +
@@ -669,8 +675,52 @@ window.startRunbookApp = function (R, meta) {
       '<div class="cab-strip" aria-label="Devices in this ' + (cs.by === 'truck' ? 'truck' : 'rack') + '">' + list.map(function (x, i) {
         return '<button class="' + (cabDone(x) ? 'ok' : (dCab(x, 'cu') !== '' || dCab(x, 'fc') !== '') ? 'part' : '') + (i === cs.idx ? ' cur' : '') + '" data-cjump="' + i + '" title="' + esc(x.name) + '">' + (i + 1) + '</button>';
       }).join('') + '</div>';
+    if (FINE) h += '<p class="small muted kbd-hint">Keyboard: type the copper count ↵, the FC count ↵ — it moves to the next device. ← → previous / next · L label · or switch to Table.</p>';
     view.innerHTML = h;
     bindCabSel();
+    if (FINE) {
+      var tgt = $('.pad input[data-cabin="' + (cu === '' ? 'cu' : fc === '' ? 'fc' : 'cu') + '"]');
+      if (tgt) tgt.focus({ preventScroll: true });
+    }
+  }
+  function cabTable(list) {
+    var uf = cs.by === 'dst' ? 'dstU' : 'srcU';
+    return '<div class="cab-table-wrap"><table class="cab-table"><thead><tr><th>#</th><th>' + (cs.by === 'dst' ? 'Target' : 'Source') + '</th><th>Device</th><th>Moves</th><th class="n">Copper</th><th class="n">FC</th><th class="n">Label</th></tr></thead><tbody>' +
+      list.map(function (d, i) {
+        var k = esc(d.key);
+        return '<tr class="' + (cabDone(d) ? 'done' : '') + '" data-row="' + i + '"><td class="muted">' + (i + 1) + '</td>' +
+          '<td class="nowrap">' + esc(cs.by === 'dst' ? d.dstRack : d.srcRack) + ' <span class="muted">' + esc(uFmt(d[uf])) + '</span></td>' +
+          '<td><a href="#" data-dev="' + k + '" class="dname">' + esc(d.name) + '</a><div class="muted small">' + esc([d.type, d.model].filter(function (v) { return !isNA(v); }).join(' · ')) + ' · ' + esc(d.serial) + '</div></td>' +
+          '<td class="small">' + (cs.by === 'dst' ? 'from ' + esc(d.srcRack) + ' ' + esc(uFmt(d.srcU)) : '→ ' + esc(d.dstRack || '—') + ' ' + esc(uFmt(d.dstU))) + '<div class="muted">' + esc(d.truck || '') + '</div></td>' +
+          '<td class="n"><input class="ct-in" type="number" inputmode="numeric" min="0" data-cabin="cu" data-key="' + k + '" data-r="' + i + '" data-c="0" value="' + esc(dCab(d, 'cu')) + '" aria-label="Copper cables for ' + esc(d.name) + '"></td>' +
+          '<td class="n"><input class="ct-in" type="number" inputmode="numeric" min="0" data-cabin="fc" data-key="' + k + '" data-r="' + i + '" data-c="1" value="' + esc(dCab(d, 'fc')) + '" aria-label="FC cables for ' + esc(d.name) + '"></td>' +
+          '<td class="n"><button class="lbl-sq' + (dLbl(d) ? ' on' : '') + '" data-clbl="' + k + '" data-r="' + i + '" data-c="2" aria-pressed="' + dLbl(d) + '" aria-label="Labelled">' + ICON.check + '</button></td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p class="small muted kbd-hint">Type a number · <b>Enter</b> / ↓ next device · ↑ / Shift+Enter previous · <b>Tab</b> next column · <b>Space</b> on Label ticks it. Saved as you go.</p>';
+  }
+  function focusTable(list) {
+    if (!FINE) return;
+    var i = cs.pending ? nextPending(list, -1) : cs.idx;
+    if (i < 0) i = 0;
+    var d = list[i], f = d && dCab(d, 'cu') === '' ? 0 : 1;
+    var el = $('.ct-in[data-r="' + i + '"][data-c="' + f + '"]');
+    if (el) { el.focus({ preventScroll: true }); el.select(); if (i > 6) el.scrollIntoView({ block: 'center' }); }
+  }
+  // Save a typed count; returns true when the stored value changed.
+  function commitCab(el) {
+    var d = devByKey[el.dataset.key], f = el.dataset.cabin;
+    var v = el.value === '' ? '' : Math.max(0, parseInt(el.value, 10) || 0);
+    if (String(dCab(d, f)) === String(v)) return false;
+    setCab(d, f, v);
+    if (v !== '') el.value = v;
+    var row = el.closest('tr');
+    if (row) {
+      row.classList.toggle('done', cabDone(d));
+      var list = cabList(), dn = list.filter(cabDone).length;
+      var pg = $('#cab-prog'); if (pg) pg.textContent = dn + ' / ' + list.length + ' done';
+      var b = $('#cab-bar'); if (b) b.innerHTML = bar({ total: list.length, closed: dn, 'In Progress': 0, Blocked: 0 });
+    }
+    return true;
   }
   function padRow(f, label, opts, cur, d) {
     var curS = cur === '' ? '' : String(cur);
@@ -1316,7 +1366,7 @@ window.startRunbookApp = function (R, meta) {
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-quick],[data-task],[data-task-link],[data-dev],[data-go],[data-gate],[data-tstatus],[data-sort],[data-dbatch],[data-dkind],[data-dstate],[data-dview],[data-dmore],' +
       '[data-setstatus],[data-devmig],[data-devshut],[data-bulk],[data-bulkset],[data-truck],[data-tadv],[data-tbatch],[data-tkstatus],[data-yn],[data-loadall],[data-shnow],[data-genum],' +
-      '[data-grow],[data-ggrp],[data-gf],[data-gmore],[data-gadd],[data-host],[data-dmode],[data-rside],[data-rbatch],[data-rack],[data-rackgo],[data-cabstep],[data-lbl],[data-lblall],[data-cby],[data-ctog],[data-cset],[data-clbl],[data-cnav],[data-cjump],[data-act]');
+      '[data-grow],[data-ggrp],[data-gf],[data-gmore],[data-gadd],[data-host],[data-dmode],[data-rside],[data-rbatch],[data-rack],[data-rackgo],[data-cabstep],[data-lbl],[data-lblall],[data-cby],[data-ctog],[data-cview],[data-cset],[data-clbl],[data-cnav],[data-cjump],[data-act]');
     if (!el) return;
     var ds = el.dataset;
     if (ds.quick) {
@@ -1335,7 +1385,12 @@ window.startRunbookApp = function (R, meta) {
       if (cs.auto && !same && cabDone(cdv)) { renderCables(); scheduleNext(); return; }
       return renderCables();
     }
-    if (ds.clbl) { var lv = devByKey[ds.clbl]; setCab(lv, 'lbl', !dLbl(lv)); return renderCables(); }
+    if (ds.cview) { cs.view = ds.cview; saveCs(); return renderCables(); }
+    if (ds.clbl) {
+      var lv = devByKey[ds.clbl]; setCab(lv, 'lbl', !dLbl(lv));
+      if (el.classList.contains('lbl-sq')) { el.classList.toggle('on', dLbl(lv)); el.setAttribute('aria-pressed', dLbl(lv)); return; }
+      return renderCables();
+    }
     if (ds.cnav) {
       clearTimeout(advT);
       if (ds.cnav === '1') return cabNext();
@@ -1470,14 +1525,48 @@ window.startRunbookApp = function (R, meta) {
   document.addEventListener('change', function (e) {
     var el = e.target;
     if (!el.dataset || !el.dataset.cabin) return;
-    var v = el.value === '' ? '' : Math.max(0, parseInt(el.value, 10) || 0);
-    setCab(devByKey[el.dataset.key], el.dataset.cabin, v);
-    if (v !== '') el.value = v;
+    if (el.closest('.cab-table')) { commitCab(el); return; }
     if (el.closest('.pad')) {
+      if (!commitCab(el)) return;
       var dd = devByKey[el.dataset.key];
       renderCables();
       if (cs.auto && cabDone(dd)) scheduleNext();
+      return;
     }
+    commitCab(el); // rack view / device card counters
+  });
+
+  // Keyboard entry for the Cables tab (laptops).
+  document.addEventListener('keydown', function (e) {
+    if ((location.hash || '').indexOf('#cables') !== 0 || sheetOpen || e.ctrlKey || e.metaKey || e.altKey) return;
+    var el = e.target, tag = el.tagName;
+    if (el.classList && (el.classList.contains('ct-in') || el.classList.contains('lbl-sq'))) {
+      var up = e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey), down = (e.key === 'Enter' && !e.shiftKey) || e.key === 'ArrowDown';
+      if (!up && !down) return;
+      if (el.classList.contains('lbl-sq') && e.key === 'Enter') return; // Enter on the tick button toggles it
+      e.preventDefault();
+      if (tag === 'INPUT') commitCab(el);
+      var r = +el.dataset.r + (up ? -1 : 1);
+      var nx = $('.cab-table [data-r="' + r + '"][data-c="' + el.dataset.c + '"]');
+      if (nx) { nx.focus(); if (nx.select) nx.select(); cs.idx = r; saveCs(); }
+      return;
+    }
+    if (tag === 'INPUT' && el.closest && el.closest('.pad')) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var f = el.dataset.cabin, d = devByKey[el.dataset.key];
+      var changed = commitCab(el);
+      if (changed) renderCables();
+      if (cabDone(d) && (cs.auto || !changed)) return scheduleNext();
+      var other = $('.pad input[data-cabin="' + (f === 'cu' ? 'fc' : 'cu') + '"]');
+      if (other) other.focus();
+      return;
+    }
+    if (/INPUT|TEXTAREA|SELECT/.test(tag) || cs.view === 'table') return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); cabNext(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); cs.idx = Math.max(0, cs.idx - 1); saveCs(); renderCables(); }
+    else if (e.key === 'l' || e.key === 'L') { var cur = cabList()[cs.idx]; if (cur) { setCab(cur, 'lbl', !dLbl(cur)); renderCables(); } }
+    else if (/^\d$/.test(e.key)) { var c0 = $('.pad input[data-cabin="cu"]'); if (c0) c0.focus(); }
   });
   $('#searchBtn').addEventListener('click', openSearch);
   window.addEventListener('hashchange', route);

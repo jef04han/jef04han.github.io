@@ -333,3 +333,24 @@ pre.note { white-space: pre-wrap; font: inherit; margin: 0; }
 .cab-strip button.part { background: color-mix(in srgb, var(--warn) 22%, var(--card)); color: var(--ink); }
 .cab-strip button.ok { background: var(--done); border-color: var(--done); color: #fff; }
 .cab-strip button.cur { outline: 2.5px solid var(--accent); outline-offset: 1px; }
+
+/* cables: laptop table */
+.mini-seg { display: inline-flex; padding: 2px; border-radius: 10px; }
+.mini-seg button { padding: 5px 10px; min-height: 30px; font-size: 12px; flex: none; }
+.kbd-hint { margin: 10px 2px; }
+.cab-table-wrap { overflow-x: auto; margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.cab-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cab-table th { position: sticky; top: 0; background: var(--chip); text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px; }
+.cab-table td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+.cab-table th.n, .cab-table td.n { text-align: center; width: 76px; }
+.cab-table tr.done td { background: color-mix(in srgb, var(--done) 9%, transparent); }
+.cab-table tr:focus-within td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cab-table .nowrap { white-space: nowrap; }
+.cab-table .dname { font-weight: 600; color: var(--ink); }
+.ct-in { width: 64px; height: 38px; text-align: center; font: inherit; font-size: 17px; font-weight: 700; border-radius: 9px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); -moz-appearance: textfield; }
+.ct-in::-webkit-outer-spin-button, .ct-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ct-in:focus, .lbl-sq:focus { outline: 2.5px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.lbl-sq { width: 38px; height: 38px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--card); color: transparent; display: inline-grid; place-items: center; }
+.lbl-sq svg { width: 20px; height: 20px; stroke-width: 3; }
+.lbl-sq.on { background: var(--done); border-color: var(--done); color: #fff; }
+@media (min-width: 800px) { .tabbar a { font-size: 11.5px; } }
