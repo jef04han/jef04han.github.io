@@ -311,6 +311,7 @@ window.startRunbookApp = function (R, meta) {
     }).join('') + '</div>';
 
     h += '<div class="btn-grid" style="margin-top:16px"><button class="btn primary" data-act="xlsx">Export Excel</button><button class="btn" data-act="share">Share status</button></div>' +
+      '<label class="btn block" style="margin-top:8px">Import from other device<input type="file" class="handover-in" accept=".xlsx,.xlsm" hidden></label>' +
       (S.exportedAt ? '<p class="small muted" style="text-align:center">Last Excel export ' + fDT(new Date(S.exportedAt)) + '</p>' : '');
     view.innerHTML = h;
   }
@@ -1172,10 +1173,15 @@ window.startRunbookApp = function (R, meta) {
       '<h2>Export</h2><div class="card"><p class="small muted" style="margin-top:0">Download your original runbook with all progress written in: task Status & Actual Start/End, device Movement / Shutdown status, truck actuals & documents, checklist and tracker columns, issues, notes and an “App Event Log” sheet. Formatting, formulas and drop-downs are kept.</p>' +
       '<button class="btn primary block" data-act="xlsx">Export updated Excel</button>' +
       (S.exportedAt ? '<div class="small muted" style="margin-top:6px">Last exported ' + fDT(new Date(S.exportedAt)) + '</div>' : '') + '</div>' +
-      '<h2>Update</h2><div class="card"><p class="small muted" style="margin-top:0">Upload a newer version with the same format. Progress recorded here is kept and matched by Task ID, device hostname + serial, truck number and row IDs.</p>' +
-      '<label class="btn primary block">Upload new runbook version<input type="file" id="reupload" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div>' +
-      '<h2>Remove</h2><div class="card"><p class="small muted" style="margin-top:0">Deletes the runbook data stored in this browser. Progress is kept unless you also clear it under “Your name, backup & reset”.</p>' +
-      '<button class="btn bad block" data-act="unload">Remove runbook from this device</button></div>';
+      '<h2>Hand over between laptop and PC</h2><div class="card"><ol class="small" style="margin:0 0 10px;padding-left:18px">' +
+      '<li>On the device you worked on: <b>Export updated Excel</b> and send the file (email / Teams / USB).</li>' +
+      '<li>On the other device: <b>Import from other device</b> and pick that file. Its progress replaces this device’s, so carry on there.</li></ol>' +
+      '<label class="btn primary block">Import from other device<input type="file" class="handover-in" accept=".xlsx,.xlsm" hidden></label></div>' +
+      '<h2>Newer runbook version</h2><div class="card"><p class="small muted" style="margin-top:0">' + (meta && meta.builtIn ? 'This device is using the runbook built into the site (' + esc(meta.builtIn) + '). ' : '') +
+      'To use a newer runbook file without losing progress recorded here, upload it — progress is matched by Task ID, device hostname + serial, truck and row IDs.</p>' +
+      '<label class="btn block">Upload newer runbook (keep my progress)<input type="file" id="reupload" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div>' +
+      '<h2>Reset</h2><div class="card"><p class="small muted" style="margin-top:0">Go back to the built-in runbook file. Progress is kept unless you also clear it under “Your name, backup & reset”.</p>' +
+      '<button class="btn bad block" data-act="unload">Reset to built-in runbook</button></div>';
   }
   function moreData() {
     return '<h2>Your name</h2><div class="card"><input type="text" id="who" placeholder="Shown on log entries" value="' + esc(S.who) + '"></div>' +
@@ -1506,7 +1512,7 @@ window.startRunbookApp = function (R, meta) {
       case 'csv': return download('cbsshift-tasks-' + stamp() + '.csv', tasksCSV(), 'text/csv');
       case 'backup': return download('cbsshift-backup-' + stamp() + '.json', JSON.stringify(S, null, 1), 'application/json');
       case 'unload':
-        if (confirm('Remove the runbook data from this device? You will need to upload it again.')) window.forgetRunbook().then(function () {
+        if (confirm('Go back to the built-in runbook file on this device?')) window.forgetRunbook().then(function () {
           history.replaceState(null, '', location.pathname);
           try { localStorage.removeItem(ROUTE_KEY); } catch (e2) { /* ignore */ }
           location.reload();
@@ -1524,6 +1530,14 @@ window.startRunbookApp = function (R, meta) {
   });
   document.addEventListener('change', function (e) {
     var el = e.target;
+    if (el.classList && el.classList.contains('handover-in')) {
+      var hf = el.files[0]; el.value = '';
+      if (!hf) return;
+      if (!confirm('Replace the progress on this device with the progress in ' + hf.name + '?\n\nUse this to continue on this device from another device’s exported Excel.')) return;
+      toast('Importing ' + hf.name + '…');
+      window.importHandover(hf).then(function () { location.hash = '#home'; location.reload(); }, function (err) { toast(err.message || 'Could not read that file'); });
+      return;
+    }
     if (!el.dataset || !el.dataset.cabin) return;
     if (el.closest('.cab-table')) { commitCab(el); return; }
     if (el.closest('.pad')) {

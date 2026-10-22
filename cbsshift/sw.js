@@ -1,6 +1,6 @@
 /* Network-first cache so the app shell opens with poor signal inside the DC. Only the app's own files are cached — never the runbook. */
-var CACHE = 'cbsshift-v4';
-var FILES = ['./', 'index.html', 'app.css', 'app.js', 'boot.js', 'parser.js', 'exporter.js', 'xlsx.mini.min.js', 'manifest.json', 'icon.svg'];
+var CACHE = 'cbsshift-v5';
+var FILES = ['./', 'index.html', 'app.css', 'app.js', 'boot.js', 'parser.js', 'exporter.js', 'xlsx.mini.min.js', 'manifest.json', 'icon.svg', 'CNB_DC_MIG_CBS_Runbook_v2.2_SS.xlsx'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
 });
