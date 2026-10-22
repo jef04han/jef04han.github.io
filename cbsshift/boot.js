@@ -6,6 +6,8 @@
 
   var LEGACY_KEY = 'cbsshift.runbook.v1';     // localStorage fallback when IndexedDB is unavailable
   var DB = 'cbsshift', STORE = 'kv';
+  // The CBS runbook ships with the site; bump `version` when the file is replaced so devices reload it.
+  var BUILTIN = { path: 'CNB_DC_MIG_CBS_Runbook_v2.2_SS.xlsx', version: 'v2.2' };
 
   /* ---------------- IndexedDB (falls back to localStorage) ---------------- */
   var dbp = null;
@@ -58,13 +60,11 @@
   }
 
   // Parse a File into the runbook model and keep it (and the original bytes) on this device.
-  window.loadRunbookFile = function (file) {
-    if (!/\.xls[xm]$/i.test(file.name)) return Promise.reject(new Error('Please choose the runbook .xlsx file.'));
-    return readFile(file).then(function (buf) {
-      var R = parse(buf, file.name);
-      var meta = { at: new Date().toISOString(), size: file.size };
-      return idbSet('runbook', { meta: meta, R: R })
-        .then(function () { return idbSet('file', { name: file.name, bytes: buf }); })
+  function loadBytes(buf, name, extra) {
+    var R = parse(buf, name);
+    var meta = Object.assign({ at: new Date().toISOString(), size: buf.byteLength }, extra || {});
+    return idbSet('runbook', { meta: meta, R: R })
+        .then(function () { return idbSet('file', { name: name, bytes: buf }); })
         .then(function () {
           try { localStorage.removeItem(LEGACY_KEY); } catch (e) { /* ignore */ }
           meta.saved = true;
@@ -73,6 +73,22 @@
           catch (e) { meta.saved = false; }
         })
         .then(function () { persist(); return { R: R, meta: meta }; });
+  }
+  window.loadRunbookFile = function (file) {
+    if (!/\.xls[xm]$/i.test(file.name)) return Promise.reject(new Error('Please choose the runbook .xlsx file.'));
+    return readFile(file).then(function (buf) { return loadBytes(buf, file.name); });
+  };
+  function loadBuiltin() {
+    return fetch(BUILTIN.path, { cache: 'no-cache' }).then(function (r) {
+      if (!r.ok) throw new Error('Built-in runbook not found');
+      return r.arrayBuffer();
+    }).then(function (buf) { return loadBytes(buf, BUILTIN.path, { builtIn: BUILTIN.version }); });
+  }
+  // Hand-over: take another device's exported Excel as this device's runbook *and* progress.
+  window.importHandover = function (file) {
+    return window.loadRunbookFile(file).then(function (o) {
+      try { localStorage.removeItem('cbsshift.progress.v1'); } catch (e) { /* ignore */ }
+      return o;
     });
   };
 
@@ -159,7 +175,17 @@
   drop.addEventListener('drop', function (e) { handle(e.dataTransfer.files[0]); });
 
   stored().then(function (o) {
-    if (o) { persist(); start(o); } else box.hidden = false;
+    // Use what this device already has, unless it is an older copy of the built-in runbook.
+    if (o && !(o.meta && o.meta.builtIn && o.meta.builtIn !== BUILTIN.version)) { persist(); return start(o); }
+    box.hidden = false;
+    drop.hidden = true;
+    msg.className = 'up-msg';
+    msg.textContent = 'Loading the CBS runbook…';
+    loadBuiltin().then(function (n) { drop.hidden = false; start(n); }, function () {
+      drop.hidden = false;
+      if (o) return start(o);
+      msg.textContent = 'Could not load the built-in runbook — upload the runbook .xlsx instead.';
+    });
   });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
