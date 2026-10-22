@@ -190,6 +190,7 @@ window.startRunbookApp = function (R, meta) {
   function dLbl(d) { var x = S.dev[d.key]; if (x && x.lbl != null) return !!x.lbl; return /^y/i.test(d.lbl || ''); }
   function cabled(d) { return dCab(d, 'cu') !== '' || dCab(d, 'fc') !== ''; }
   function setCab(d, f, v) { var x = S.dev[d.key] || (S.dev[d.key] = {}); x[f] = v; x.at = nowIso(); save(); }
+  function uFmt(u) { return u && !isNA(u) ? (/^u/i.test(String(u).trim()) ? '' : 'U') + String(u).trim() : ''; }
   function uTop(u) { var n = String(u || '').match(/\d+/g); return n ? Math.max.apply(null, n.map(Number)) : -1; }
   function rackSort(a, b) { return a.localeCompare(b, undefined, { numeric: true }); }
   function cabCtl(d) {
@@ -223,7 +224,7 @@ window.startRunbookApp = function (R, meta) {
   var view = $('#view');
   var ui = { gate: 'All', status: 'All', q: '', sort: 'batch', dBatch: 'All', dKind: 'All', dState: 'All', dView: 'mig', dq: '', dLimit: PAGE,
     tBatch: 'All', g: {}, dMode: 'list', rSide: 'src', rBatch: 'All', rq: '' };
-  var RENDER = { home: renderHome, tasks: renderTasks, trucks: renderTrucks, devices: renderDevices, more: renderMore };
+  var RENDER = { home: renderHome, tasks: renderTasks, trucks: renderTrucks, devices: renderDevices, cables: renderCables, more: renderMore };
 
   function route() {
     try { localStorage.setItem(ROUTE_KEY, location.hash || '#home'); } catch (e) { /* ignore */ }
@@ -605,6 +606,116 @@ window.startRunbookApp = function (R, meta) {
       '<button class="' + (ui.dMode === 'racks' ? 'on' : '') + '" data-dmode="racks">Racks</button></div>';
   }
 
+  /* ---------------- CABLE CHECK (fast entry, one device at a time) ---------------- */
+  var CKEY = 'cbsshift.cables';
+  var CU_OPTS = [0, 1, 2, 3, 4, 5, 6, 8], FC_OPTS = [0, 1, 2, 3, 4, 6, 8];
+  var cs = (function () {
+    var d = { by: 'src', val: '', idx: 0, pending: true, auto: true };
+    try { return Object.assign(d, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) { return d; }
+  })();
+  function saveCs() { try { localStorage.setItem(CKEY, JSON.stringify(cs)); } catch (e) { /* ignore */ } }
+  function cabScopes(by) {
+    var f = by === 'dst' ? 'dstRack' : by === 'truck' ? 'truck' : 'srcRack', m = {};
+    devices.forEach(function (d) { if (d.virtual || isNA(d[f])) return; (m[d[f]] = m[d[f]] || []).push(d); });
+    return m;
+  }
+  function cabList() {
+    var phys = devices.filter(function (d) { return !d.virtual; });
+    var list, uf = cs.by === 'dst' ? 'dstU' : 'srcU';
+    if (cs.by === 'all') list = phys.slice();
+    else list = (cabScopes(cs.by)[cs.val] || []).slice();
+    return list.sort(function (a, b) {
+      var ra = cs.by === 'dst' ? a.dstRack : a.srcRack, rb = cs.by === 'dst' ? b.dstRack : b.srcRack;
+      return (cs.by === 'src' || cs.by === 'dst' ? 0 : rackSort(ra || '', rb || '')) || uTop(b[uf]) - uTop(a[uf]) || a.idx - b.idx;
+    });
+  }
+  function cabDone(d) { return dCab(d, 'cu') !== '' && dCab(d, 'fc') !== ''; }
+  function renderCables() {
+    var scopes = cs.by === 'all' ? null : cabScopes(cs.by);
+    var names = scopes ? Object.keys(scopes).sort(rackSort) : [];
+    if (scopes && names.indexOf(cs.val) < 0) {
+      // start on the first rack / truck that still has work
+      cs.val = names.filter(function (n) { return scopes[n].some(function (d) { return !cabDone(d); }); })[0] || names[0] || '';
+      startScope();
+    }
+    var list = cabList();
+    if (cs.idx >= list.length) cs.idx = Math.max(0, list.length - 1);
+    saveCs();
+    var done = list.filter(cabDone).length;
+    var h = '<div class="seg cab-by">' + [['src', 'Source rack'], ['dst', 'Target rack'], ['truck', 'Truck'], ['all', 'All']].map(function (o) {
+      return '<button class="' + (cs.by === o[0] ? 'on' : '') + '" data-cby="' + o[0] + '">' + o[1] + '</button>';
+    }).join('') + '</div>';
+    if (scopes) h += '<select class="search cab-sel" id="cabsel" aria-label="Choose ' + (cs.by === 'truck' ? 'truck' : 'rack') + '">' + names.map(function (n) {
+      var ds = scopes[n], k = ds.filter(cabDone).length;
+      return '<option value="' + esc(n) + '"' + (n === cs.val ? ' selected' : '') + '>' + esc(n) + ' — ' + k + '/' + ds.length + (k === ds.length ? ' ✓' : '') + '</option>';
+    }).join('') + '</select>';
+    h += '<div class="row small" style="margin:2px 2px 6px"><b>' + done + ' / ' + list.length + ' done</b><span class="spacer"></span>' +
+      '<button class="chip' + (cs.pending ? ' on' : '') + '" data-ctog="pending">Skip done</button>' +
+      '<button class="chip' + (cs.auto ? ' on' : '') + '" data-ctog="auto">Auto-next</button></div>' +
+      bar({ total: list.length, closed: done, 'In Progress': 0, Blocked: 0 });
+    if (!list.length) { view.innerHTML = h + '<div class="empty">No physical devices here.</div>'; bindCabSel(); return; }
+    var d = list[cs.idx], uf = cs.by === 'dst' ? 'dstU' : 'srcU', cu = dCab(d, 'cu'), fc = dCab(d, 'fc');
+    h += '<div class="cab-card' + (cabDone(d) ? ' done' : '') + '">' +
+      '<div class="row"><span class="u-badge">' + (cs.by === 'dst' ? esc(d.dstRack) : esc(d.srcRack)) + (d[uf] && !isNA(d[uf]) ? ' · ' + esc(uFmt(d[uf])) : '') + '</span>' +
+      '<span class="spacer"></span><span class="small muted">' + (cs.idx + 1) + ' of ' + list.length + '</span></div>' +
+      '<div class="cab-name" data-dev="' + esc(d.key) + '">' + esc(d.name) + '</div>' +
+      '<div class="sub">' + esc([d.type, d.model].filter(function (v) { return !isNA(v); }).join(' · ')) + ' · <span class="mono">' + esc(d.serial) + '</span></div>' +
+      '<div class="sub">' + esc(d.srcRack) + (d.srcU ? ' ' + esc(uFmt(d.srcU)) : '') + ' → ' + esc(d.dstRack || '—') + (d.dstU ? ' ' + esc(uFmt(d.dstU)) : '') + ' · ' + esc(d.truck || '') + '</div>' +
+      padRow('cu', 'Copper', CU_OPTS, cu, d) + padRow('fc', 'FC', FC_OPTS, fc, d) +
+      '<button class="lblb wide' + (dLbl(d) ? ' on' : '') + '" data-clbl="' + esc(d.key) + '">' + ICON.check + '<span>' + (dLbl(d) ? 'Labelled' : 'Mark labelled') + '</span></button>' +
+      '</div>' +
+      '<div class="cab-nav"><button class="btn" data-cnav="-1"' + (cs.idx ? '' : ' disabled') + '>‹ Prev</button>' +
+      '<button class="btn primary" data-cnav="1">' + (cs.idx < list.length - 1 ? 'Next ›' : 'Finish ✓') + '</button></div>' +
+      '<div class="cab-strip" aria-label="Devices in this ' + (cs.by === 'truck' ? 'truck' : 'rack') + '">' + list.map(function (x, i) {
+        return '<button class="' + (cabDone(x) ? 'ok' : (dCab(x, 'cu') !== '' || dCab(x, 'fc') !== '') ? 'part' : '') + (i === cs.idx ? ' cur' : '') + '" data-cjump="' + i + '" title="' + esc(x.name) + '">' + (i + 1) + '</button>';
+      }).join('') + '</div>';
+    view.innerHTML = h;
+    bindCabSel();
+  }
+  function padRow(f, label, opts, cur, d) {
+    var curS = cur === '' ? '' : String(cur);
+    var custom = curS !== '' && opts.indexOf(+curS) < 0;
+    return '<div class="pad"><div class="pad-h"><span>' + label + '</span><b>' + (curS === '' ? '–' : esc(curS)) + '</b></div><div class="pad-k">' +
+      opts.map(function (n) { return '<button class="' + (curS === String(n) ? 'on' : '') + '" data-cset="' + f + '" data-v="' + n + '" data-key="' + esc(d.key) + '">' + n + '</button>'; }).join('') +
+      '<input type="number" inputmode="numeric" min="0" placeholder="#" class="' + (custom ? 'on' : '') + '" data-cabin="' + f + '" data-key="' + esc(d.key) + '" value="' + (custom ? esc(curS) : '') + '" aria-label="Other ' + label + ' count"></div></div>';
+  }
+  function bindCabSel() {
+    var s = $('#cabsel');
+    if (s) s.addEventListener('change', function () { cs.val = s.value; startScope(); saveCs(); renderCables(); window.scrollTo(0, 0); });
+  }
+  // When a rack / truck is picked, start at its first device still missing counts.
+  function startScope() {
+    cs.idx = 0;
+    if (!cs.pending) return;
+    var nx = nextPending(cabList(), -1);
+    if (nx > 0) cs.idx = nx;
+  }
+  function nextPending(list, from) {
+    for (var i = from + 1; i < list.length; i++) if (!cabDone(list[i])) return i;
+    return -1;
+  }
+  var advT = null;
+  function scheduleNext() { clearTimeout(advT); advT = setTimeout(cabNext, 280); }
+  function cabNext() {
+    clearTimeout(advT); advT = null;
+    var list = cabList();
+    var nx = cs.pending ? nextPending(list, cs.idx) : cs.idx + 1;
+    if (nx < 0 || nx >= list.length) {
+      // this rack / truck is finished — offer the next one with work left
+      var left = list.filter(function (d) { return !cabDone(d); }).length;
+      if (left) toast(left + ' device(s) here still need counts');
+      else if (cs.by === 'all') toast('All devices complete ✓');
+      else {
+        var scopes = cabScopes(cs.by), names = Object.keys(scopes).sort(rackSort), was = cs.val;
+        var after = names.slice(names.indexOf(cs.val) + 1).concat(names.slice(0, names.indexOf(cs.val)));
+        var nxt = after.filter(function (n) { return scopes[n].some(function (d) { return !cabDone(d); }); })[0];
+        if (nxt) { cs.val = nxt; startScope(); toast(was + ' complete ✓ — now ' + nxt); }
+        else toast(was + ' complete ✓ — everything is counted');
+      }
+    } else cs.idx = nx;
+    saveCs(); renderCables(); window.scrollTo(0, 0);
+  }
+
   /* ---------------- RACKS ---------------- */
   function rackField() { return ui.rSide === 'dst' ? 'dstRack' : 'srcRack'; }
   function rackDevices(side, rack) {
@@ -677,9 +788,9 @@ window.startRunbookApp = function (R, meta) {
       '<div class="btn-grid" style="margin:10px 0"><button class="btn" data-lblall="' + esc(rack) + '" data-side="' + side + '" data-v="1">Label all ✓</button><button class="btn" data-lblall="' + esc(rack) + '" data-side="' + side + '" data-v="0">Clear labels</button></div>' +
       ds.map(function (d) {
         var u = d[uf];
-        return '<div class="rack-dev' + (dLbl(d) ? ' done' : '') + '"><div class="row" data-dev="' + esc(d.key) + '" style="cursor:pointer"><span class="u-badge">' + (u && !isNA(u) ? 'U ' + esc(u) : '—') + '</span>' +
+        return '<div class="rack-dev' + (dLbl(d) ? ' done' : '') + '"><div class="row" data-dev="' + esc(d.key) + '" style="cursor:pointer"><span class="u-badge">' + (u && !isNA(u) ? esc(uFmt(u)) : '—') + '</span>' +
           '<div style="flex:1;min-width:0"><div class="title-s">' + esc(d.name) + '</div><div class="sub">' + esc([d.type, d.model].filter(function (v) { return !isNA(v); }).join(' · ')) + ' · ' + esc(d.serial) + '</div>' +
-          '<div class="sub">' + (side === 'dst' ? 'from ' + esc(d.srcRack) + (d.srcU ? ' U' + esc(d.srcU) : '') : '→ ' + esc(d.dstRack || '—') + (d.dstU ? ' U' + esc(d.dstU) : '')) + ' · ' + esc(d.truck || '') + ' · ' + esc(dMig(d)) + '</div></div>' +
+          '<div class="sub">' + (side === 'dst' ? 'from ' + esc(d.srcRack) + (d.srcU ? ' ' + esc(uFmt(d.srcU)) : '') : '→ ' + esc(d.dstRack || '—') + (d.dstU ? ' ' + esc(uFmt(d.dstU)) : '')) + ' · ' + esc(d.truck || '') + ' · ' + esc(dMig(d)) + '</div></div>' +
           '<span class="chev">' + ICON.chev + '</span></div>' + cabCtl(d) + '</div>';
       }).join('');
     openSheet(h);
@@ -693,7 +804,7 @@ window.startRunbookApp = function (R, meta) {
     var main = ui.dView === 'mig' ? m : s;
     return '<div class="li" data-dev="' + esc(d.key) + '"><div class="grow"><div class="title">' + esc(d.name) + '</div>' +
       '<div class="sub">B' + esc(d.batch) + ' · ' + esc(d.truck || '—') + ' · ' + esc(d.kind) + (d.virtual ? ' on ' + esc(d.phys) : ' · ' + esc(d.type)) + '</div>' +
-      '<div class="sub">' + (d.virtual ? esc(d.app || d.appGroup) : esc(d.srcRack) + (d.srcU ? ' U' + esc(d.srcU) : '') + ' → ' + esc(d.dstRack || '—') + (d.dstU ? ' U' + esc(d.dstU) : '')) + (isNA(d.ip) ? '' : ' · ' + esc(d.ip)) + '</div></div>' +
+      '<div class="sub">' + (d.virtual ? esc(d.app || d.appGroup) : esc(d.srcRack) + (d.srcU ? ' ' + esc(uFmt(d.srcU)) : '') + ' → ' + esc(d.dstRack || '—') + (d.dstU ? ' ' + esc(uFmt(d.dstU)) : '')) + (isNA(d.ip) ? '' : ' · ' + esc(d.ip)) + '</div></div>' +
       '<div class="stage-col">' + (d.virtual && ui.dView === 'mig' ? '' : (ui.dView === 'mig' ? dots : '')) +
       '<small class="' + (/validated|powered off|os down/i.test(main) ? 'ok' : /issue/i.test(main) ? 'bad' : '') + '">' + esc(main) + '</small></div></div>';
   }
@@ -722,9 +833,9 @@ window.startRunbookApp = function (R, meta) {
     if (!d.virtual) h += '<div class="section-t">Cabling & labels</div>' + cabCtl(d) +
       '<div class="small muted" style="margin-top:4px">Racks: <a href="#" data-rackgo="src" data-r="' + esc(d.srcRack) + '">' + esc(d.srcRack) + '</a> → <a href="#" data-rackgo="dst" data-r="' + esc(d.dstRack) + '">' + esc(d.dstRack || '—') + '</a></div>';
     if (!d.virtual) h += '<div class="section-t">Location</div><div class="kv">' +
-      kv('Source rack / U', esc(d.srcRack) + (d.srcU ? ' · U ' + esc(d.srcU) : '') + (d.uSize ? ' (' + esc(d.uSize) + 'U)' : '')) +
+      kv('Source rack / U', esc(d.srcRack) + (d.srcU ? ' · ' + esc(uFmt(d.srcU)) : '') + (d.uSize ? ' (' + esc(d.uSize) + 'U)' : '')) +
       kv('Transport', esc(d.mode || '—')) +
-      kv('Target rack / U', '<b>' + esc(d.dstRack || '—') + '</b>' + (d.dstU ? ' · U ' + esc(d.dstU) : '')) +
+      kv('Target rack / U', '<b>' + esc(d.dstRack || '—') + '</b>' + (d.dstU ? ' · ' + esc(uFmt(d.dstU)) : '')) +
       (d.eqRack ? kv('Rack', esc(d.eqRack)) : '') + '</div>';
     h += '<div class="section-t">Schedule</div><div class="kv">' +
       kv('Shutdown', esc(d.shutDate) + ' ' + esc(d.shutTime)) + kv('Royal handover', esc(d.handover)) + kv('Truck moves', esc(d.truckTime)) +
@@ -1205,7 +1316,7 @@ window.startRunbookApp = function (R, meta) {
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-quick],[data-task],[data-task-link],[data-dev],[data-go],[data-gate],[data-tstatus],[data-sort],[data-dbatch],[data-dkind],[data-dstate],[data-dview],[data-dmore],' +
       '[data-setstatus],[data-devmig],[data-devshut],[data-bulk],[data-bulkset],[data-truck],[data-tadv],[data-tbatch],[data-tkstatus],[data-yn],[data-loadall],[data-shnow],[data-genum],' +
-      '[data-grow],[data-ggrp],[data-gf],[data-gmore],[data-gadd],[data-host],[data-dmode],[data-rside],[data-rbatch],[data-rack],[data-rackgo],[data-cabstep],[data-lbl],[data-lblall],[data-act]');
+      '[data-grow],[data-ggrp],[data-gf],[data-gmore],[data-gadd],[data-host],[data-dmode],[data-rside],[data-rbatch],[data-rack],[data-rackgo],[data-cabstep],[data-lbl],[data-lblall],[data-cby],[data-ctog],[data-cset],[data-clbl],[data-cnav],[data-cjump],[data-act]');
     if (!el) return;
     var ds = el.dataset;
     if (ds.quick) {
@@ -1216,6 +1327,21 @@ window.startRunbookApp = function (R, meta) {
       else return openTask(t.id);
       return sheetOpen && lastOpen ? reopen(function () { lastOpen[0].apply(null, lastOpen[1]); }) : rerender();
     }
+    if (ds.cby) { cs.by = ds.cby; cs.val = ''; startScope(); saveCs(); return renderCables(); }
+    if (ds.ctog) { cs[ds.ctog] = !cs[ds.ctog]; saveCs(); return renderCables(); }
+    if (ds.cset) {
+      var cdv = devByKey[ds.key], same = String(dCab(cdv, ds.cset)) === ds.v;
+      setCab(cdv, ds.cset, same ? '' : +ds.v);
+      if (cs.auto && !same && cabDone(cdv)) { renderCables(); scheduleNext(); return; }
+      return renderCables();
+    }
+    if (ds.clbl) { var lv = devByKey[ds.clbl]; setCab(lv, 'lbl', !dLbl(lv)); return renderCables(); }
+    if (ds.cnav) {
+      clearTimeout(advT);
+      if (ds.cnav === '1') return cabNext();
+      cs.idx = Math.max(0, cs.idx - 1); saveCs(); renderCables(); return window.scrollTo(0, 0);
+    }
+    if (ds.cjump) { clearTimeout(advT); cs.idx = +ds.cjump; saveCs(); renderCables(); return window.scrollTo(0, 0); }
     if (ds.cabstep) {
       var cd = devByKey[ds.key], cur0 = parseInt(dCab(cd, ds.cabstep), 10) || 0;
       var nv = Math.max(0, cur0 + (+ds.step));
@@ -1347,6 +1473,11 @@ window.startRunbookApp = function (R, meta) {
     var v = el.value === '' ? '' : Math.max(0, parseInt(el.value, 10) || 0);
     setCab(devByKey[el.dataset.key], el.dataset.cabin, v);
     if (v !== '') el.value = v;
+    if (el.closest('.pad')) {
+      var dd = devByKey[el.dataset.key];
+      renderCables();
+      if (cs.auto && cabDone(dd)) scheduleNext();
+    }
   });
   $('#searchBtn').addEventListener('click', openSearch);
   window.addEventListener('hashchange', route);

@@ -305,3 +305,31 @@ pre.note { white-space: pre-wrap; font: inherit; margin: 0; }
 .lblb { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; height: 40px; padding: 0 11px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--card); color: var(--muted); font-weight: 700; font-size: 13px; }
 .lblb svg { width: 18px; height: 18px; stroke-width: 2.6; }
 .lblb.on { background: var(--done); border-color: var(--done); color: #fff; }
+
+/* cable check */
+.tabbar a { font-size: 10.5px; }
+.cab-by { margin-bottom: 8px; }
+.cab-by button { font-size: 12px; }
+.cab-sel { appearance: auto; -webkit-appearance: menulist; font-weight: 700; }
+.cab-card { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--warn); border-radius: 16px; padding: 12px 14px; margin-top: 10px; box-shadow: var(--shadow); }
+.cab-card.done { border-top-color: var(--done); }
+.cab-name { font-size: 19px; font-weight: 800; margin: 6px 0 2px; word-break: break-word; cursor: pointer; }
+.cab-card .sub { font-size: 13px; color: var(--muted); }
+.pad { margin-top: 10px; }
+.pad-h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.pad-h span { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pad-h b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.pad-k { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.pad-k button, .pad-k input { height: 44px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 20px; font-weight: 800; text-align: center; min-width: 0; }
+.pad-k input { font-size: 18px; -moz-appearance: textfield; }
+.pad-k input::-webkit-outer-spin-button, .pad-k input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pad-k button.on, .pad-k input.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lblb.wide { width: 100%; justify-content: center; margin-top: 12px; height: 44px; font-size: 15px; }
+.cab-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 12px; }
+.cab-nav .btn { min-height: 52px; font-size: 17px; }
+.cab-nav .btn[disabled] { opacity: .4; }
+.cab-strip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 14px; }
+.cab-strip button { min-width: 34px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 12px; font-weight: 700; padding: 0 4px; }
+.cab-strip button.part { background: color-mix(in srgb, var(--warn) 22%, var(--card)); color: var(--ink); }
+.cab-strip button.ok { background: var(--done); border-color: var(--done); color: #fff; }
+.cab-strip button.cur { outline: 2.5px solid var(--accent); outline-offset: 1px; }
