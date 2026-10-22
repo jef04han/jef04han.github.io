@@ -227,7 +227,7 @@
       dstRack: 'Target Rack', dstU: 'Target U Position', eqRack: 'Equivalent Source Rack', san: 'SAN Connected', sanSw: 'SAN Switches (Batch)',
       fabric: 'Fabric Coverage', oemContacts: 'OEM Contacts', hwVendor: 'HW Vendor', w2w: 'W2W Power Status', devStatus: 'Device Status',
       scrap: 'Scrap / OOS Flag', reason: 'Movement Reason', shut: 'Shutdown Status', mig: 'Migration Status', remarks: 'Remarks',
-      note: 'App Notes', updAt: 'Status Updated' };
+      note: 'App Notes', updAt: 'Status Updated', cu: 'Copper Cables', fc: 'FC Cables', lbl: 'Labelled (Y/N)' };
     var devKeys = Object.keys(DF);
     var devices = scope.rows.map(function (r) {
       var o = devKeys.map(function (k) { return get(r, DF[k]); });

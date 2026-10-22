@@ -244,7 +244,10 @@
         if (x.shut) de.push(valueEdit(colName(cS) + r._r, 'text', x.shut));
         var cU = colFor(scope, 'Status Updated', de);
         de.push(valueEdit(colName(cU) + r._r, 'date', x.at, cU));
-        de.push(valueEdit(colName(colFor(scope, 'App Notes', de)) + r._r, 'text', x.note));
+        if (x.note != null) de.push(valueEdit(colName(colFor(scope, 'App Notes', de)) + r._r, 'text', x.note));
+        if (x.cu != null) de.push(valueEdit(colName(colFor(scope, 'Copper Cables', de)) + r._r, 'num', x.cu));
+        if (x.fc != null) de.push(valueEdit(colName(colFor(scope, 'FC Cables', de)) + r._r, 'num', x.fc));
+        if (x.lbl != null) de.push(valueEdit(colName(colFor(scope, 'Labelled (Y/N)', de)) + r._r, 'text', x.lbl ? 'Y' : 'N'));
         dn++;
       });
       apply(scope.name, de);

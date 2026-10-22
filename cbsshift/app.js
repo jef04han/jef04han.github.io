@@ -185,6 +185,23 @@ window.startRunbookApp = function (R, meta) {
     if (!quiet) { log(d.name + ' · ' + (field === 'mig' ? 'movement' : 'shutdown') + ' → ' + value); save(); }
   }
   function migIdx(s) { return MIG.indexOf(s); }
+  // cabling & labelling (physical devices)
+  function dCab(d, f) { var x = S.dev[d.key]; if (x && f in x) return x[f] == null ? '' : x[f]; return d[f] == null ? '' : d[f]; }
+  function dLbl(d) { var x = S.dev[d.key]; if (x && x.lbl != null) return !!x.lbl; return /^y/i.test(d.lbl || ''); }
+  function cabled(d) { return dCab(d, 'cu') !== '' || dCab(d, 'fc') !== ''; }
+  function setCab(d, f, v) { var x = S.dev[d.key] || (S.dev[d.key] = {}); x[f] = v; x.at = nowIso(); save(); }
+  function uTop(u) { var n = String(u || '').match(/\d+/g); return n ? Math.max.apply(null, n.map(Number)) : -1; }
+  function rackSort(a, b) { return a.localeCompare(b, undefined, { numeric: true }); }
+  function cabCtl(d) {
+    var k = esc(d.key);
+    function num(f, label) {
+      return '<div class="cab"><span>' + label + '</span><div class="stepper-n"><button class="mini" data-cabstep="' + f + '" data-step="-1" data-key="' + k + '" aria-label="Fewer ' + label + '">−</button>' +
+        '<input class="cab-in" type="number" inputmode="numeric" min="0" placeholder="–" data-cabin="' + f + '" data-key="' + k + '" value="' + esc(dCab(d, f)) + '">' +
+        '<button class="mini" data-cabstep="' + f + '" data-step="1" data-key="' + k + '" aria-label="More ' + label + '">+</button></div></div>';
+    }
+    return '<div class="cab-row">' + num('cu', 'Copper') + num('fc', 'FC') +
+      '<button class="lblb' + (dLbl(d) ? ' on' : '') + '" data-lbl="' + k + '" aria-pressed="' + dLbl(d) + '">' + ICON.check + '<span>Label</span></button></div>';
+  }
 
   /* ---------------- trucks ---------------- */
   function tkVal(tr, label) { var r = truckRow[tr.id]; return r ? shVal('trucks', r, label) : ''; }
@@ -205,7 +222,7 @@ window.startRunbookApp = function (R, meta) {
   /* ---------------- routing ---------------- */
   var view = $('#view');
   var ui = { gate: 'All', status: 'All', q: '', sort: 'batch', dBatch: 'All', dKind: 'All', dState: 'All', dView: 'mig', dq: '', dLimit: PAGE,
-    tBatch: 'All', g: {} };
+    tBatch: 'All', g: {}, dMode: 'list', rSide: 'src', rBatch: 'All', rq: '' };
   var RENDER = { home: renderHome, tasks: renderTasks, trucks: renderTrucks, devices: renderDevices, more: renderMore };
 
   function route() {
@@ -533,6 +550,9 @@ window.startRunbookApp = function (R, meta) {
 
   /* ---------------- DEVICES ---------------- */
   function renderDevices(args, keep) {
+    if (args && args[0] === 'racks') ui.dMode = 'racks';
+    else if (!keep) ui.dMode = 'list';
+    if (ui.dMode === 'racks') return renderRacks();
     if (!keep) {
       ui.dLimit = PAGE;
       if (args && args[0] === 'truck' && args[1]) { ui.dq = args[1]; ui.dBatch = 'All'; ui.dState = 'All'; }
@@ -556,7 +576,7 @@ window.startRunbookApp = function (R, meta) {
     var doneN = ui.dView === 'mig' ? (cnt.Validated || 0) : base.filter(function (d) { return /powered off|os down|not applicable/i.test(dShut(d)); }).length;
     var pend = cnt.Pending || 0;
 
-    var h = '<div class="sticky-tools"><input class="search" type="search" id="dq" placeholder="Hostname, serial, IP, rack, app, TR-2.4…" value="' + esc(ui.dq) + '">' +
+    var h = modeSeg() + '<div class="sticky-tools"><input class="search" type="search" id="dq" placeholder="Hostname, serial, IP, rack, app, TR-2.4…" value="' + esc(ui.dq) + '">' +
       '<div class="chips">' + ['All'].concat(batches).map(function (b) {
         return '<button class="chip' + (ui.dBatch === b ? ' on' : '') + '" data-dbatch="' + esc(b) + '">' + (b === 'All' ? 'All batches' : 'B' + esc(b)) + '</button>';
       }).join('') + '<span style="flex:none;width:6px"></span>' + ['All'].concat(KINDS).map(function (k) {
@@ -580,6 +600,91 @@ window.startRunbookApp = function (R, meta) {
     var inp = $('#dq');
     inp.addEventListener('input', debounce(function () { ui.dq = inp.value; ui.dLimit = PAGE; renderDevices(null, true); refocus('#dq'); }, 250));
   }
+  function modeSeg() {
+    return '<div class="seg" style="margin-bottom:10px"><button class="' + (ui.dMode !== 'racks' ? 'on' : '') + '" data-dmode="list">Device list</button>' +
+      '<button class="' + (ui.dMode === 'racks' ? 'on' : '') + '" data-dmode="racks">Racks</button></div>';
+  }
+
+  /* ---------------- RACKS ---------------- */
+  function rackField() { return ui.rSide === 'dst' ? 'dstRack' : 'srcRack'; }
+  function rackDevices(side, rack) {
+    var f = side === 'dst' ? 'dstRack' : 'srcRack', uf = side === 'dst' ? 'dstU' : 'srcU';
+    return devices.filter(function (d) { return !d.virtual && d[f] === rack; })
+      .sort(function (a, b) { return uTop(b[uf]) - uTop(a[uf]) || a.idx - b.idx; });
+  }
+  function renderRacks() {
+    var f = rackField(), q = (ui.rq || '').toLowerCase().trim();
+    var by = {};
+    devices.forEach(function (d) {
+      if (d.virtual || isNA(d[f])) return;
+      if (ui.rBatch !== 'All' && d.batch !== ui.rBatch) return;
+      (by[d[f]] = by[d[f]] || []).push(d);
+    });
+    var racks = Object.keys(by).sort(rackSort).filter(function (r) {
+      return !q || r.toLowerCase().indexOf(q) >= 0 || by[r].some(function (d) { return d.hay.indexOf(q) >= 0; });
+    });
+    var all = [];
+    racks.forEach(function (r) { all = all.concat(by[r]); });
+    var lb = all.filter(dLbl).length, cb = all.filter(cabled).length;
+    var cu = 0, fc = 0;
+    all.forEach(function (d) { cu += +dCab(d, 'cu') || 0; fc += +dCab(d, 'fc') || 0; });
+    var h = modeSeg() + '<div class="sticky-tools"><div class="seg" style="margin-bottom:8px"><button class="' + (ui.rSide !== 'dst' ? 'on' : '') + '" data-rside="src">Source racks (ITI)</button>' +
+      '<button class="' + (ui.rSide === 'dst' ? 'on' : '') + '" data-rside="dst">Target racks (STT)</button></div>' +
+      '<input class="search" type="search" id="rq" placeholder="Rack (e.g. C2, G-15) or device…" value="' + esc(ui.rq || '') + '">' +
+      '<div class="chips">' + ['All'].concat(batches).map(function (b) {
+        return '<button class="chip' + (ui.rBatch === b ? ' on' : '') + '" data-rbatch="' + esc(b) + '">' + (b === 'All' ? 'All batches' : 'Batch ' + esc(b)) + '</button>';
+      }).join('') + '</div>' +
+      '<div class="dev-sum"><div class="row small wrap"><b>' + racks.length + ' racks · ' + all.length + ' devices</b><span class="muted">· labelled ' + lb + ' · cables counted ' + cb +
+      ' · ' + cu + ' copper · ' + fc + ' FC</span></div>' + bar({ total: all.length, closed: lb, 'In Progress': 0, Blocked: 0 }) + '</div></div>';
+    if (!racks.length) h += '<div class="empty">No racks match.</div>';
+    else h += '<div class="list">' + racks.map(function (r) {
+      var ds = by[r], l = ds.filter(dLbl).length, c = ds.filter(cabled).length;
+      var trk = [], bt = [];
+      ds.forEach(function (d) { if (d.truck && trk.indexOf(d.truck) < 0) trk.push(d.truck); if (bt.indexOf(d.batch) < 0) bt.push(d.batch); });
+      var other = [];
+      ds.forEach(function (d) { var o = ui.rSide === 'dst' ? d.srcRack : d.dstRack; if (o && !isNA(o) && other.indexOf(o) < 0) other.push(o); });
+      return '<div class="li" data-rack="' + esc(r) + '"><div class="rack-badge">' + esc(r) + '</div><div class="grow">' +
+        '<div class="title">' + ds.length + ' device' + (ds.length === 1 ? '' : 's') + ' <span class="muted small">· B' + esc(bt.join(', B')) + ' · ' + esc(trk.slice(0, 3).join(', ')) + (trk.length > 3 ? '…' : '') + '</span></div>' +
+        '<div class="sub">' + (ui.rSide === 'dst' ? 'from ' : '→ ') + esc(other.slice(0, 5).join(', ')) + (other.length > 5 ? '…' : '') + '</div>' +
+        '<div class="sub"><span class="' + (l === ds.length ? 'ok-c' : '') + '">✓ labelled ' + l + '/' + ds.length + '</span> · <span class="' + (c === ds.length ? 'ok-c' : '') + '">cables ' + c + '/' + ds.length + '</span></div></div>' +
+        '<span class="chev">' + ICON.chev + '</span></div>';
+    }).join('') + '</div>';
+    view.innerHTML = h;
+    var inp = $('#rq');
+    inp.addEventListener('input', debounce(function () { ui.rq = inp.value; renderRacks(); refocus('#rq'); }, 250));
+  }
+  function rackInfo(side, rack) {
+    var row, rows;
+    if (side === 'src') {
+      row = shRows('rackmove').filter(function (r) { return r.key === rack; })[0];
+      rows = [['Moves to', 'Destination @ STT'], ['Disposition', 'Rack Disposition'], ['Rack type', 'Rack Type'], ['Ships in batch', 'Rack Ships in Batch'], ['Truck', 'Rack Truck']];
+    } else {
+      row = shRows('stt').filter(function (r) { return r.key === rack; })[0];
+      rows = [['Rack', 'Recommended Rack'], ['Movement', 'Rack Movement'], ['Truck', 'Rack Truck'], ['Socket', 'Socket Type'], ['Power circuit', 'Required Power Circuit'], ['PDU', 'Remarks (PDU)']];
+    }
+    if (!row) return '';
+    var cells = rows.map(function (x) { var v = row.v[C.norm(x[1])]; return v ? kv(x[0], esc(v)) : ''; }).join('');
+    return cells ? '<div class="kv">' + cells + '</div>' : '';
+  }
+  function openRack(side, rack) {
+    remember(openRack, [side, rack]);
+    var ds = rackDevices(side, rack), uf = side === 'dst' ? 'dstU' : 'srcU';
+    var l = ds.filter(dLbl).length, c = ds.filter(cabled).length, cu = 0, fc = 0;
+    ds.forEach(function (d) { cu += +dCab(d, 'cu') || 0; fc += +dCab(d, 'fc') || 0; });
+    var h = '<div class="row"><span class="rack-badge big">' + esc(rack) + '</span><div style="flex:1"><div class="small muted">' + (side === 'dst' ? 'Target rack @ STT' : 'Source rack @ ITI') + '</div>' +
+      '<b>' + ds.length + ' devices</b> <span class="small muted">· labelled ' + l + '/' + ds.length + ' · cables ' + c + '/' + ds.length + ' · ' + cu + ' copper · ' + fc + ' FC</span></div></div>' +
+      rackInfo(side, rack) +
+      '<div class="btn-grid" style="margin:10px 0"><button class="btn" data-lblall="' + esc(rack) + '" data-side="' + side + '" data-v="1">Label all ✓</button><button class="btn" data-lblall="' + esc(rack) + '" data-side="' + side + '" data-v="0">Clear labels</button></div>' +
+      ds.map(function (d) {
+        var u = d[uf];
+        return '<div class="rack-dev' + (dLbl(d) ? ' done' : '') + '"><div class="row" data-dev="' + esc(d.key) + '" style="cursor:pointer"><span class="u-badge">' + (u && !isNA(u) ? 'U ' + esc(u) : '—') + '</span>' +
+          '<div style="flex:1;min-width:0"><div class="title-s">' + esc(d.name) + '</div><div class="sub">' + esc([d.type, d.model].filter(function (v) { return !isNA(v); }).join(' · ')) + ' · ' + esc(d.serial) + '</div>' +
+          '<div class="sub">' + (side === 'dst' ? 'from ' + esc(d.srcRack) + (d.srcU ? ' U' + esc(d.srcU) : '') : '→ ' + esc(d.dstRack || '—') + (d.dstU ? ' U' + esc(d.dstU) : '')) + ' · ' + esc(d.truck || '') + ' · ' + esc(dMig(d)) + '</div></div>' +
+          '<span class="chev">' + ICON.chev + '</span></div>' + cabCtl(d) + '</div>';
+      }).join('');
+    openSheet(h);
+  }
+
   function devRow(d) {
     var m = dMig(d), s = dShut(d), i = migIdx(m);
     var dots = '<span class="stage-dots">';
@@ -614,6 +719,8 @@ window.startRunbookApp = function (R, meta) {
       '<button class="btn" data-devmig="0" data-key="' + esc(d.key) + '">Reset to Pending</button></div>' +
       (x.at ? '<div class="small muted" style="margin-top:6px">Updated ' + fDT(new Date(x.at)) + '</div>' : '');
 
+    if (!d.virtual) h += '<div class="section-t">Cabling & labels</div>' + cabCtl(d) +
+      '<div class="small muted" style="margin-top:4px">Racks: <a href="#" data-rackgo="src" data-r="' + esc(d.srcRack) + '">' + esc(d.srcRack) + '</a> → <a href="#" data-rackgo="dst" data-r="' + esc(d.dstRack) + '">' + esc(d.dstRack || '—') + '</a></div>';
     if (!d.virtual) h += '<div class="section-t">Location</div><div class="kv">' +
       kv('Source rack / U', esc(d.srcRack) + (d.srcU ? ' · U ' + esc(d.srcU) : '') + (d.uSize ? ' (' + esc(d.uSize) + 'U)' : '')) +
       kv('Transport', esc(d.mode || '—')) +
@@ -1098,7 +1205,7 @@ window.startRunbookApp = function (R, meta) {
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-quick],[data-task],[data-task-link],[data-dev],[data-go],[data-gate],[data-tstatus],[data-sort],[data-dbatch],[data-dkind],[data-dstate],[data-dview],[data-dmore],' +
       '[data-setstatus],[data-devmig],[data-devshut],[data-bulk],[data-bulkset],[data-truck],[data-tadv],[data-tbatch],[data-tkstatus],[data-yn],[data-loadall],[data-shnow],[data-genum],' +
-      '[data-grow],[data-ggrp],[data-gf],[data-gmore],[data-gadd],[data-host],[data-act]');
+      '[data-grow],[data-ggrp],[data-gf],[data-gmore],[data-gadd],[data-host],[data-dmode],[data-rside],[data-rbatch],[data-rack],[data-rackgo],[data-cabstep],[data-lbl],[data-lblall],[data-act]');
     if (!el) return;
     var ds = el.dataset;
     if (ds.quick) {
@@ -1109,6 +1216,32 @@ window.startRunbookApp = function (R, meta) {
       else return openTask(t.id);
       return sheetOpen && lastOpen ? reopen(function () { lastOpen[0].apply(null, lastOpen[1]); }) : rerender();
     }
+    if (ds.cabstep) {
+      var cd = devByKey[ds.key], cur0 = parseInt(dCab(cd, ds.cabstep), 10) || 0;
+      var nv = Math.max(0, cur0 + (+ds.step));
+      setCab(cd, ds.cabstep, nv);
+      var box = el.parentNode.querySelector('input');
+      if (box) box.value = nv;
+      return;
+    }
+    if (ds.lbl) {
+      var ld = devByKey[ds.lbl], on = !dLbl(ld);
+      setCab(ld, 'lbl', on);
+      if (on) log(ld.name + ' · labelled');
+      save();
+      return lastOpen ? reopen(function () { lastOpen[0].apply(null, lastOpen[1]); }) : null;
+    }
+    if (ds.lblall) {
+      var on2 = ds.v === '1', list2 = rackDevices(ds.side, ds.lblall);
+      list2.forEach(function (x) { var o = S.dev[x.key] || (S.dev[x.key] = {}); o.lbl = on2; o.at = nowIso(); });
+      log('Rack ' + ds.lblall + ' · ' + list2.length + ' devices ' + (on2 ? 'labelled' : 'labels cleared')); save();
+      return reopen(function () { openRack(ds.side, ds.lblall); });
+    }
+    if (ds.dmode) { location.hash = ds.dmode === 'racks' ? '#devices/racks' : '#devices'; return; }
+    if (ds.rside) { ui.rSide = ds.rside; return renderRacks(); }
+    if (ds.rbatch) { ui.rBatch = ds.rbatch; return renderRacks(); }
+    if (ds.rack) return openRack(ui.rSide === 'dst' ? 'dst' : 'src', ds.rack);
+    if (ds.rackgo) { e.preventDefault(); if (!ds.r || isNA(ds.r)) return; return openRack(ds.rackgo, ds.r); }
     if (ds.task) return openTask(ds.task);
     if (ds.taskLink) { e.preventDefault(); return openTask(ds.taskLink); }
     if (ds.truck) { e.preventDefault(); return openTruck(ds.truck); }
@@ -1207,6 +1340,13 @@ window.startRunbookApp = function (R, meta) {
       case 'sharelog':
         return shareText(S.log.map(function (l) { return fDT(new Date(l.t)) + ' ' + l.m + (l.by ? ' — ' + l.by : ''); }).join('\n'), 'CBS Shift log');
     }
+  });
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el.dataset || !el.dataset.cabin) return;
+    var v = el.value === '' ? '' : Math.max(0, parseInt(el.value, 10) || 0);
+    setCab(devByKey[el.dataset.key], el.dataset.cabin, v);
+    if (v !== '') el.value = v;
   });
   $('#searchBtn').addEventListener('click', openSearch);
   window.addEventListener('hashchange', route);
