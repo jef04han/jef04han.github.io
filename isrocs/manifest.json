@@ -1,0 +1,10 @@
+{
+  "name": "ISRO CS Prep — Scientist/Engineer SC",
+  "short_name": "ISRO CS",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b2545",
+  "theme_color": "#0b2545",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
