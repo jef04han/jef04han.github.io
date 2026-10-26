@@ -225,6 +225,24 @@ input[type=search], select {
 .notes th, .notes td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
 .notes th { background: var(--chip); }
 .notes-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; flex-wrap: wrap; }
+/* "?" explain-in-simple-words buttons */
+.why {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: 4px; padding: 0;
+  border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted);
+  font: 700 12px/1 inherit; vertical-align: 1px; opacity: .55; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+.why:hover, .why:focus-visible { opacity: 1; color: var(--accent); border-color: var(--accent); }
+.why.on { opacity: 1; background: var(--accent); border-color: var(--accent); color: #fff; }
+.why-box {
+  margin: 6px 0 8px; padding: 9px 12px; border-radius: 10px; font-size: 14.5px; line-height: 1.5;
+  background: hsl(150, 55%, var(--tint)); border-left: 4px solid hsl(150, 50%, 40%); color: var(--ink);
+}
+.why-box b { color: hsl(150, 50%, 32%); }
+@media (prefers-color-scheme: dark) { .why-box b { color: hsl(150, 50%, 62%); } }
+.tip .why-box { background: var(--card); }
+.why-row td { padding: 0 6px; border: 0; }
+@media (hover: none) { .why { opacity: .8; width: 24px; height: 24px; } }
 .hit { display: block; color: var(--ink); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); margin: 8px 0; }
 .hit small { color: var(--muted); font-weight: 600; }
 .pq { border-bottom: 1px solid var(--line); padding: 14px 0; }

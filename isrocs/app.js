@@ -92,10 +92,24 @@
     }).join('');
   }
   // Tiny markdown for study notes: #, ##, ###, -, 1., |tables|, > tip, ``` blocks, paragraphs.
+  // A "?? text" line explains the block (or table row) just above it in beginner terms; it renders as
+  // a small ? button that reveals the explanation.
+  var whyN = 0;
+  function isWhy(line) { return /^\?\?\s/.test(line.trim()); }
+  function whyText(line) { return line.trim().replace(/^\?\?\s/, ''); }
+  function whyBtn(id) { return ' <button class="why" data-why="' + id + '" aria-label="Explain in simple words" title="Explain in simple words">?</button>'; }
+  function whyBox(id, text) { return '<div class="why-box" id="why-' + id + '" hidden><b>In simple words:</b> ' + inline(text) + '</div>'; }
   function md(text) {
     var lines = text.replace(/\r/g, '').split('\n');
     var out = [], i = 0, para = [];
-    function flush() { if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; } }
+    function flush(why) {
+      if (!para.length) return;
+      var id = why ? ++whyN : 0;
+      out.push('<p>' + inline(para.join(' ')) + (why ? whyBtn(id) : '') + '</p>' + (why ? whyBox(id, why) : ''));
+      para = [];
+    }
+    // Explanation lines directly after a tip/table/paragraph attach to that block.
+    function takeWhy() { return i < lines.length && isWhy(lines[i]) ? whyText(lines[i++]) : null; }
     while (i < lines.length) {
       var l = lines[i], t = l.trim(), m;
       if (t.indexOf('```') === 0) {
@@ -104,38 +118,51 @@
         out.push('<pre>' + esc(buf.join('\n')) + '</pre>'); i++; continue;
       }
       if (!t) { flush(); i++; continue; }
+      if (isWhy(t)) { i++; flush(whyText(t)); continue; }
       if ((m = t.match(/^(#{1,3})\s+(.*)$/))) {
         flush(); var lv = m[1].length + 1;
         out.push('<h' + lv + '>' + inline(m[2]) + '</h' + lv + '>'); i++; continue;
       }
       if (t[0] === '|') {
         flush(); var rows = [];
-        while (i < lines.length && lines[i].trim()[0] === '|') { rows.push(lines[i].trim()); i++; }
-        var html = '<div class="tbl"><table>';
-        rows.forEach(function (r, ri) {
-          if (/^\|[\s:|-]+\|$/.test(r)) return;
-          var cells = r.replace(/^\||\|$/g, '').split('|');
-          var tag = ri === 0 ? 'th' : 'td';
-          html += '<tr>' + cells.map(function (c) { return '<' + tag + '>' + inline(c.trim()) + '</' + tag + '>'; }).join('') + '</tr>';
+        while (i < lines.length && (lines[i].trim()[0] === '|' || isWhy(lines[i]))) {
+          if (isWhy(lines[i])) { if (rows.length) rows[rows.length - 1].why = whyText(lines[i]); }
+          else rows.push({ r: lines[i].trim() });
+          i++;
+        }
+        var html = '<div class="tbl"><table>', tableWhy = '';
+        rows.forEach(function (row, ri) {
+          if (/^\|[\s:|-]+\|$/.test(row.r)) return;
+          var cells = row.r.replace(/^\||\|$/g, '').split('|');
+          var tag = ri === 0 ? 'th' : 'td', id = row.why ? ++whyN : 0;
+          html += '<tr>' + cells.map(function (c, ci) {
+            return '<' + tag + '>' + inline(c.trim()) + (id && ci === cells.length - 1 ? whyBtn(id) : '') + '</' + tag + '>';
+          }).join('') + '</tr>';
+          if (!id) return;
+          if (ri === 0) tableWhy = whyBox(id, row.why);
+          else html += '<tr class="why-row" id="why-' + id + '" hidden><td colspan="' + cells.length + '"><div class="why-box"><b>In simple words:</b> ' + inline(row.why) + '</div></td></tr>';
         });
-        out.push(html + '</table></div>'); continue;
+        out.push(html + '</table></div>' + tableWhy); continue;
       }
       if (t[0] === '>') {
         flush(); var tip = [];
         while (i < lines.length && lines[i].trim()[0] === '>') { tip.push(lines[i].trim().replace(/^>\s?/, '')); i++; }
-        out.push('<div class="tip">' + inline(tip.join(' ')) + '</div>'); continue;
+        var tw = takeWhy(), tid = tw ? ++whyN : 0;
+        out.push('<div class="tip">' + inline(tip.join(' ')) + (tw ? whyBtn(tid) + whyBox(tid, tw) : '') + '</div>'); continue;
       }
       if (/^([-*]|\d+\.)\s/.test(t)) {
         flush(); var ordered = /^\d+\./.test(t), items = [];
-        while (i < lines.length && /^\s*([-*]|\d+\.)\s/.test(lines[i])) {
+        while (i < lines.length && (/^\s*([-*]|\d+\.)\s/.test(lines[i]) || isWhy(lines[i]))) {
+          if (isWhy(lines[i])) { if (items.length) items[items.length - 1][2] = whyText(lines[i]); i++; continue; }
           var depth = lines[i].match(/^\s*/)[0].length >= 2 ? 1 : 0;
-          items.push([depth, lines[i].trim().replace(/^([-*]|\d+\.)\s/, '')]); i++;
+          items.push([depth, lines[i].trim().replace(/^([-*]|\d+\.)\s/, ''), null]); i++;
         }
         var h = '', open = 0, tag = ordered ? 'ol' : 'ul';
         items.forEach(function (it) {
           if (it[0] > open) { h = h.replace(/<\/li>$/, ''); h += '<ul>'; open = 1; }
           else if (it[0] < open) { h += '</ul></li>'; open = 0; }
-          h += '<li>' + inline(it[1]) + '</li>';
+          var id = it[2] ? ++whyN : 0;
+          h += '<li>' + inline(it[1]) + (id ? whyBtn(id) + whyBox(id, it[2]) : '') + '</li>';
         });
         if (open) h += '</ul></li>';
         out.push('<' + tag + '>' + h + '</' + tag + '>'); continue;
@@ -488,7 +515,7 @@
       var wrap = h('section', { class: 'module study' });
       var doneN = NOTES.filter(function (n) { return read[n.key]; }).length;
       wrap.innerHTML =
-        '<div class="mod-head"><div><h1>Study</h1><p class="muted">Concise exam notes for every subject, plus both past papers fully solved.</p></div>' +
+        '<div class="mod-head"><div><h1>Study</h1><p class="muted">Concise exam notes for every subject, plus both past papers fully solved. Tap the ? after any line to have it explained in simple words.</p></div>' +
         '<div class="stat"><b>' + doneN + '</b><span>/ ' + NOTES.length + ' chapters revised</span></div></div>' +
         '<input type="search" id="sq" placeholder="Search all notes…" value="' + esc(q) + '">' +
         '<div class="study-grid"><nav class="toc" id="toc"></nav><article class="notes card" id="notes"></article></div>';
@@ -503,6 +530,11 @@
       var input = wrap.querySelector('#sq');
       input.addEventListener('input', function () { q = input.value.trim(); show(key); });
       wrap.addEventListener('click', function (e) {
+        var w = e.target.closest('.why');
+        if (w) {
+          var ex = document.getElementById('why-' + w.getAttribute('data-why'));
+          ex.hidden = !ex.hidden; w.classList.toggle('on', !ex.hidden); return;
+        }
         var a = e.target.closest('a.hit, .toc a');
         if (!a) return;
         q = '';
@@ -549,7 +581,9 @@
           var m = line.match(/^#{1,3}\s+(.*)/);
           if (m) { section = m[1]; return; }
           if (line.toLowerCase().indexOf(t) >= 0 && out.length < 120) {
-            var safe = inline(line.replace(/^\s*([-*]|\d+\.|>|\|)\s*/, '').replace(/\|/g, ' · '));
+            var simple = isWhy(line);
+            var safe = (simple ? '<i>In simple words:</i> ' : '') +
+              inline((simple ? whyText(line) : line).replace(/^\s*([-*]|\d+\.|>|\|)\s*/, '').replace(/\|/g, ' · '));
             var re = new RegExp('(' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
             safe = ('>' + safe + '<').replace(/>([^<]*)</g, function (_, txt) { return '>' + txt.replace(re, '<mark>$1</mark>') + '<'; }).slice(1, -1);
             out.push('<a class="hit" href="#study/' + n.key + '"><small>' + esc(n.title) + ' › ' + esc(section) + '</small><div>' + safe + '</div></a>');
