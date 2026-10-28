@@ -1,7 +1,7 @@
 /* Network-first cache so the prep app opens offline after the first visit. */
-var CACHE = 'isrocs-v2';
+var CACHE = 'isrocs-v3';
 var FILES = ['./', 'index.html', 'app.css', 'app.js', 'manifest.json', 'icon.svg',
-  'data/mindmap.js', 'data/notes.js', 'data/pyq.js', 'data/q1.js', 'data/q2.js', 'data/q3.js', 'data/q4.js'];
+  'data/mindmap.js', 'data/notes.js', 'data/pyq.js', 'data/q1.js', 'data/q2.js', 'data/q3.js', 'data/q4.js', 'data/plan.js'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
 });
