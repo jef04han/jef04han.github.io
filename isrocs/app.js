@@ -31,6 +31,7 @@
   var QBYID = {};
   var perSubjCount = {};
   var MINDMAP = '';
+  var PLAN = [];
   var NOTES = [];       // {key, title, md}
 
   /* ---------- storage ---------- */
@@ -196,14 +197,15 @@
 
   function route() {
     var hash = (location.hash || '#quiz').slice(1).split('/');
-    var tab = ['map', 'quiz', 'study'].indexOf(hash[0]) >= 0 ? hash[0] : 'quiz';
+    var tab = ['plan', 'map', 'quiz', 'study'].indexOf(hash[0]) >= 0 ? hash[0] : 'quiz';
     document.querySelectorAll('.tab').forEach(function (b) {
       b.classList.toggle('active', b.getAttribute('data-tab') === tab);
       b.setAttribute('aria-selected', b.getAttribute('data-tab') === tab);
     });
     save('tab', tab);
     view.innerHTML = '';
-    if (tab === 'map') MindMap.render(hash[1]);
+    if (tab === 'plan') Plan.render();
+    else if (tab === 'map') MindMap.render(hash[1]);
     else if (tab === 'quiz') Quiz.render(hash[1]);
     else Study.render(hash[1]);
     window.scrollTo(0, 0);
@@ -360,6 +362,7 @@
       var f = st.filter;
       if (f === 'all') return true;
       if (f === 'pyq') return !!q.src;
+      if (f.indexOf('pyq-') === 0) return !!q.src && q.s === f.slice(4);
       return q.s === f;
     }
     function pool() {
@@ -401,7 +404,12 @@
           var n = QS.filter(function (q) { return q.s === x[0]; }).length;
           var d = QS.filter(function (q) { return q.s === x[0] && st.ans[q.id]; }).length;
           return '<option value="' + x[0] + '">' + esc(x[1]) + ' (' + d + '/' + n + ')</option>';
-        }).join('');
+        }).join('') + '<optgroup label="Past-paper questions by subject">' +
+        SUBJECTS.map(function (x) {
+          var n = QS.filter(function (q) { return q.src && q.s === x[0]; }).length;
+          var d = QS.filter(function (q) { return q.src && q.s === x[0] && st.ans[q.id]; }).length;
+          return n ? '<option value="pyq-' + x[0] + '">Past papers · ' + esc(x[1]) + ' (' + d + '/' + n + ')</option>' : '';
+        }).join('') + '</optgroup>';
       var net = s.ok - s.bad / 3;
       wrap.innerHTML =
         '<div class="mod-head"><div><h1>Quiz</h1><p class="muted">Random order, every question once. Answered ones drop into the bucket.</p></div>' +
@@ -496,7 +504,9 @@
       else if ((k === 'enter' || k === 'arrowright') && document.querySelector('#qnext:not([disabled])')) { next(); route(); e.preventDefault(); }
     });
 
-    return { render: render };
+    // Used by Study and Plan buttons: show unanswered questions from one set.
+    function practise(filter) { st.filter = filter; st.mode = 'new'; next(); location.hash = '#quiz'; }
+    return { render: render, practise: practise };
   })();
 
   /* =====================================================================
@@ -556,9 +566,7 @@
       var rd = box.querySelector('#rd');
       if (rd) rd.onchange = function () { if (rd.checked) read[key] = 1; else delete read[key]; save('read', read); route(); };
       var pb = box.querySelector('#practice');
-      if (pb) pb.onclick = function () {
-        var st = load('quiz', {}); st.filter = key; st.mode = 'new'; st.cur = null; save('quiz', st); location.hash = '#quiz';
-      };
+      if (pb) pb.onclick = function () { Quiz.practise(key); };
     }
     function paper(yr) {
       var qs = QS.filter(function (x) { return x.id.indexOf('p' + yr + '-') === 0; })
@@ -596,6 +604,78 @@
     return { render: render };
   })();
 
+  /* =====================================================================
+     PLAN — timed night-before checklist
+     ===================================================================== */
+  var Plan = (function () {
+    var ticks = load('plan', {});
+    function mins(hhmm) { var p = hhmm.split(':'); return +p[0] * 60 + +p[1]; }
+    // Blocks run 14:00 → 01:00, so times after midnight count as 24:xx.
+    function span(b) { var f = mins(b.from), t = mins(b.to); if (f < 720) f += 1440; if (t <= 720) t += 1440; return [f, t]; }
+    function nowMins() { var d = new Date(), m = d.getHours() * 60 + d.getMinutes(); return m < 720 ? m + 1440 : m; }
+    function label(hhmm) {
+      var h = +hhmm.split(':')[0], m = hhmm.split(':')[1];
+      return (h % 12 || 12) + ':' + m + (h >= 12 ? ' pm' : ' am');
+    }
+    function render() {
+      var total = 0, done = 0, now = nowMins();
+      PLAN.forEach(function (b, bi) { b.items.forEach(function (_, ii) { total++; if (ticks[bi + '.' + ii]) done++; }); });
+      var wrap = h('section', { class: 'module plan' });
+      var html = '<div class="mod-head"><div><h1>Tonight’s plan</h1><p class="muted">28 Oct, 2 pm → 1 am. Every item is a question pattern from the 2023 or 2025 paper (23·Q52 = 2023 question 52). Tick it only when you can solve it without looking.</p></div>' +
+        '<div class="stat"><b id="pldone">' + done + '</b><span>/ ' + total + ' done</span></div></div>' +
+        '<div class="bar"><i id="plbar" style="width:' + (100 * done / total).toFixed(1) + '%"></i></div>';
+      PLAN.forEach(function (b, bi) {
+        var sp = span(b), state = now >= sp[1] ? 'past' : now >= sp[0] ? 'now' : 'next';
+        var bd = b.items.filter(function (_, ii) { return ticks[bi + '.' + ii]; }).length;
+        var hue = b.subj.length && SUBJ[b.subj[0]] ? SUBJ[b.subj[0]].hue : 30;
+        html += '<div class="card pblock ' + state + (bd === b.items.length ? ' complete' : '') + '" style="--h:' + hue + '" id="pb' + bi + '">' +
+          '<div class="pb-head"><span class="pb-time">' + label(b.from) + ' – ' + label(b.to) + '</span>' +
+          (state === 'now' ? '<span class="tag pyq">NOW</span>' : '') +
+          '<span class="pb-n">' + bd + '/' + b.items.length + '</span></div>' +
+          '<h2>' + esc(b.title) + '</h2><ul class="pitems">' +
+          b.items.map(function (it, ii) {
+            var id = bi + '.' + ii;
+            return '<li><label><input type="checkbox" data-t="' + id + '"' + (ticks[id] ? ' checked' : '') + '><span>' + inline(it) + '</span></label></li>';
+          }).join('') + '</ul>';
+        if (b.subj.length) {
+          html += '<div class="pb-links">' + b.subj.map(function (k) {
+            var name = SUBJ[k] ? SUBJ[k].name : 'Formula sheet';
+            var pyq = SUBJ[k] && QS.some(function (q) { return q.src && q.s === k; });
+            return '<a class="btn ghost" href="#study/' + k + '">Notes · ' + esc(name) + '</a>' +
+              (pyq ? '<button class="btn primary" data-pyq="' + k + '">Past-paper Qs · ' + esc(name) + '</button>' : '');
+          }).join('') + '</div>';
+        }
+        html += '</div>';
+      });
+      wrap.innerHTML = html;
+      view.appendChild(wrap);
+      wrap.addEventListener('change', function (e) {
+        var id = e.target.getAttribute('data-t');
+        if (!id) return;
+        if (e.target.checked) ticks[id] = 1; else delete ticks[id];
+        save('plan', ticks);
+        var bi = +id.split('.')[0], blk = document.getElementById('pb' + bi);
+        var bd = PLAN[bi].items.filter(function (_, ii) { return ticks[bi + '.' + ii]; }).length;
+        blk.querySelector('.pb-n').textContent = bd + '/' + PLAN[bi].items.length;
+        blk.classList.toggle('complete', bd === PLAN[bi].items.length);
+        var all = Object.keys(ticks).length;
+        document.getElementById('pldone').textContent = all;
+        document.getElementById('plbar').style.width = (100 * all / total).toFixed(1) + '%';
+      });
+      wrap.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-pyq]');
+        if (!b) return;
+        Quiz.practise('pyq-' + b.getAttribute('data-pyq'));
+      });
+      var cur = wrap.querySelector('.pblock.now');
+      if (cur) setTimeout(function () {
+        var top = cur.getBoundingClientRect().top + window.scrollY - document.querySelector('.topbar').offsetHeight - 12;
+        window.scrollTo(0, top);
+      }, 0);
+    }
+    return { render: render };
+  })();
+
   /* ---------- boot ---------- */
   function start() {
     view = document.getElementById('view');
@@ -613,6 +693,7 @@
   window.ISRO = {
     addQ: addQ, addPYQ: addPYQ, start: start,
     setMindmap: function (t) { MINDMAP = t; },
+    setPlan: function (p) { PLAN = p; },
     addNotes: function (key, title, text) { NOTES.push({ key: key, title: title, md: text }); },
     _qs: QS
   };
